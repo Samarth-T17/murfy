@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "accessibility-helper",
+  "version": "1.0.0",
+  "description": "AI accessibility assistant that helps you read websites easily using text-to-speech (TTS).",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": []
+}
