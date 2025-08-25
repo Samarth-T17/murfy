@@ -1,49 +1,47 @@
-# React Chrome Extension Template
+# Murphy - Text to Speech Chrome Extension
 
-This is a template for creating a Chrome extension using React and [Vite](https://vitejs.dev/) with TypeScript.
+A Chrome extension that converts text to natural speech using the Murf AI API.
 
+## Features
 
-## Getting Started
+- 🎤 **Text to Speech**: Convert any text to natural-sounding speech using Murf AI
+- 🎨 **Chrome Extension UI**: Clean, modern interface designed for Chrome extensions
+- 💾 **Save Notes**: Save your text content with Chrome notifications
+- 🎵 **Audio Playback**: Built-in audio player to listen to generated speech
+- ⚡ **Real-time Generation**: Fast speech generation with loading states
 
-### Prerequisites
+## Setup
 
-Make sure you have [Node.js](https://nodejs.org/) (version 18+ or 20+) installed on your machine.
+### 1. Install Dependencies
 
-### Setup
+```bash
+npm install
+```
 
-1. Clone or fork the repository :
+### 2. Configure Murf API
 
-    ```sh
-    # To clone
-    git clone https://github.com/5tigerjelly/chrome-extension-react-template
-    cd chrome-extension-react-template
-    ```
+1. Sign up at [Murf.ai](https://murf.ai/)
+2. Get your API key from the dashboard
+3. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+4. Add your Murf API key to `.env`:
+   ```
+   REACT_APP_MURF_API_KEY=your_actual_murf_api_key_here
+   ```
 
-2. Install the dependencies:
+### 3. Development
 
-    ```sh
-    npm install
-    ```
-
-## 🏗️ Development
-
-To start the development server:
-
-```sh
+```bash
 npm run dev
 ```
 
-This will start the Vite development server and open your default browser.
+### 4. Build for Production
 
-## 📦 Build 
-
-To create a production build:
-
-```sh
+```bash
 npm run build
 ```
-
-This will generate the build files in the `build` directory.
 
 ## 📂 Load Extension in Chrome
 
@@ -51,15 +49,41 @@ This will generate the build files in the `build` directory.
 2. Enable "Developer mode" using the toggle switch in the top right corner.
 3. Click "Load unpacked" and select the `build` directory.
 
-Your React app should now be loaded as a Chrome extension!
+Your Murphy extension should now be loaded in Chrome!
 
-## 🗂️ Project Structure
+## Murf API Integration
 
-- `public/`: Contains static files and the `manifest.json`.
-- `src/`: Contains the React app source code.
-- `vite.config.ts`: Vite configuration file.
-- `tsconfig.json`: TypeScript configuration file.
-- `package.json`: Contains the project dependencies and scripts.
+This extension uses the Murf AI API for high-quality text-to-speech generation. The API provides:
+
+- Natural-sounding voices
+- Multiple language support
+- High-quality audio output
+- Fast generation times
+
+### API Features Used
+
+- **Voice Selection**: Currently uses `en-US-1` voice (configurable)
+- **Output Format**: MP3 audio files
+- **Sample Rate**: 22050 Hz for optimal quality
+- **Error Handling**: Comprehensive error handling with user feedback
+
+## Extension Structure
+
+```
+src/
+├── App.tsx          # Main application component
+├── index.css        # Global styles with Tailwind
+├── main.tsx         # React entry point
+└── vite-env.d.ts    # TypeScript declarations
+```
+
+## Technologies Used
+
+- **React 18** - UI framework
+- **TypeScript** - Type safety
+- **Tailwind CSS v4** - Styling
+- **Vite** - Build tool
+- **Murf AI API** - Text-to-speech generation
 
 ## License
 
