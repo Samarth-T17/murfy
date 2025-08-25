@@ -1,90 +1,36 @@
-# Murphy - Text to Speech Chrome Extension
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-A Chrome extension that converts text to natural speech using the Murf AI API.
+## Getting Started
 
-## Features
-
-- 🎤 **Text to Speech**: Convert any text to natural-sounding speech using Murf AI
-- 🎨 **Chrome Extension UI**: Clean, modern interface designed for Chrome extensions
-- 💾 **Save Notes**: Save your text content with Chrome notifications
-- 🎵 **Audio Playback**: Built-in audio player to listen to generated speech
-- ⚡ **Real-time Generation**: Fast speech generation with loading states
-
-## Setup
-
-### 1. Install Dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure Murf API
-
-1. Sign up at [Murf.ai](https://murf.ai/)
-2. Get your API key from the dashboard
-3. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
-4. Add your Murf API key to `.env`:
-   ```
-   REACT_APP_MURF_API_KEY=your_actual_murf_api_key_here
-   ```
-
-### 3. Development
+First, run the development server:
 
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-### 4. Build for Production
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-```bash
-npm run build
-```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-## 📂 Load Extension in Chrome
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-1. Open Chrome and navigate to `chrome://extensions/`.
-2. Enable "Developer mode" using the toggle switch in the top right corner.
-3. Click "Load unpacked" and select the `build` directory.
+## Learn More
 
-Your Murphy extension should now be loaded in Chrome!
+To learn more about Next.js, take a look at the following resources:
 
-## Murf API Integration
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-This extension uses the Murf AI API for high-quality text-to-speech generation. The API provides:
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-- Natural-sounding voices
-- Multiple language support
-- High-quality audio output
-- Fast generation times
+## Deploy on Vercel
 
-### API Features Used
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-- **Voice Selection**: Currently uses `en-US-1` voice (configurable)
-- **Output Format**: MP3 audio files
-- **Sample Rate**: 22050 Hz for optimal quality
-- **Error Handling**: Comprehensive error handling with user feedback
-
-## Extension Structure
-
-```
-src/
-├── App.tsx          # Main application component
-├── index.css        # Global styles with Tailwind
-├── main.tsx         # React entry point
-└── vite-env.d.ts    # TypeScript declarations
-```
-
-## Technologies Used
-
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Tailwind CSS v4** - Styling
-- **Vite** - Build tool
-- **Murf AI API** - Text-to-speech generation
-
-## License
-
-This project is licensed under the MIT License.
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
