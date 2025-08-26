@@ -72,10 +72,9 @@ export async function generateAudioFromText(options: TTSOptions): Promise<TTSRes
         );
 
 
-
         if (response.data && response.data.audioFile) {
             // Audio file generated successfully
-            console.log('Generated audio file:', response.data.audioFile);
+            console.log('Generated audio file from the service:', response.data.audioFile);
             return {
                 audioFile: response.data.audioFile,
                 success: true
