@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -26,10 +26,16 @@ import {
     Info,
     Mic,
     Volume2,
-    Users
+    Users,
+    Play,
+    Pause,
+    Download,
+    Loader2
 } from 'lucide-react'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
+import { generateAudioFromText, VOICE_OPTIONS, createTTSContent, estimateAudioDuration } from '@/lib/tts'
+import type { TTSOptions, TTSResponse } from '@/lib/tts'
 
 const themes = [
     {
@@ -118,8 +124,27 @@ const Page = () => {
         editedContent: 0
     });
 
-    // Update word counts when content changes
-    React.useEffect(() => {
+    // TTS-related state
+    // This is used to give the user options for text-to-speech selects default voice 
+    const [selectedVoice, setSelectedVoice] = useState<string>('en-US-terrell');
+
+    // This is used to manage the audio generation state and display the loading indicator
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+
+   // The Generated Audio state its stores the audio file URL once generated
+    const [generatedAudio, setGeneratedAudio] = useState<string | null>(null);
+
+    // This is used to manage the audio generation error state
+    const [audioError, setAudioError] = useState<string | null>(null);
+
+    // This is used to manage the audio playback state is playing or not
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    // This is used to manage the finalized content state to be played
+    const [finalizedContent, setFinalizedContent] = useState<PodcastContent | null>(null);
+
+    // Update word counts when content changes not necessarily but looks good 
+    useEffect(() => {
         const counts = {
             generatedTitle: generatedContent.title.trim().split(/\s+/).filter(word => word.length > 0).length,
             generatedDescription: generatedContent.description.trim().split(/\s+/).filter(word => word.length > 0).length,
@@ -131,6 +156,8 @@ const Page = () => {
         setWordCounts(counts);
     }, [generatedContent, editedContent]);
 
+
+    // Handle changes to the edited content 
     const handleEditedContentChange = (field: keyof PodcastContent, value: string) => {
         setEditedContent(prev => ({
             ...prev,
@@ -138,37 +165,55 @@ const Page = () => {
         }));
     };
 
+
+    // This is used to generate the podcast content by using the Gemini service
     const generatePodcastContent = async () => {
+
+        // if the theme is not selected then it shows an error message
         if (!selectedTheme) {
             toast.error('Please select a theme first');
             return;
         }
 
+        // Check if podcast idea is empty if its empty then it shows an error message
         if (!podcastIdea.trim()) {
             toast.error('Please enter your podcast idea first');
             return;
         }
 
+        // Start generating audio and displays loading indicator and a toast message
         setIsGenerating(true);
         toast.info('Generating podcast content from your idea...');
 
         try {
+
             // Use the Gemini service to generate content from idea
             const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme);
 
+
+            // Set the generated Content by gemini 
+
             setGeneratedContent(generatedPodcast);
+
             setEditedContent(generatedPodcast); // Initialize edited content with generated content
+
             setHasGenerated(true);
+
             setActiveTab('generated');
+
             toast.success('Podcast content generated successfully! 🎉');
+            
         } catch (error) {
             console.error('Generation error:', error);
             toast.error('Failed to generate podcast content. Please try again.');
         } finally {
+
+            // This disables the loading indicator 
             setIsGenerating(false);
         }
     };
 
+    // This is used to copy the podcast content to clipboard so that we can save it somewhere else
     const copyToClipboard = (content: PodcastContent) => {
         const fullContent = `📻 PODCAST CONTENT\n\n` +
             `🎯 Title: ${content.title}\n\n` +
@@ -186,6 +231,8 @@ const Page = () => {
         });
     };
 
+
+    // This clears the content from all fields
     const discardContent = (type: 'generated' | 'edited') => {
         if (type === 'generated') {
             setGeneratedContent({ title: '', description: '', content: '' });
@@ -199,6 +246,8 @@ const Page = () => {
         }
     };
 
+
+    // This is used to finalize the podcast content after the user has finished editing
     const finalizeContent = (content: PodcastContent, type: 'generated' | 'edited') => {
         // Here you would save the finalized content to your backend
         const contentType = type === 'generated' ? 'AI-Generated' : 'Edited';
@@ -212,7 +261,7 @@ const Page = () => {
             }
         );
 
-        // Optional: Reset state or redirect user
+        // Optional: 
         console.log('Finalized content:', {
             type,
             theme: selectedTheme,
@@ -224,6 +273,93 @@ const Page = () => {
             },
             content
         });
+
+        // Store finalized content for TTS
+        setFinalizedContent(content);
+        setGeneratedAudio(null); // Reset audio when content is finalized
+        setAudioError(null);
+    };
+
+    // TTS Functions using Murph API calls the TTS service file 
+    const generateAudio = async () => {
+
+        // Gives an error if content which is to be made voice of is not finalized
+        if (!finalizedContent) {
+            toast.error('Please finalize your content first');
+            return;
+        }
+
+        // Start generating audio and show loading state
+        setIsGeneratingAudio(true);
+        setAudioError(null);
+
+        try {
+
+            // Create TTS content from finalized content
+            const ttsText = createTTSContent(finalizedContent);
+
+            // This calls the Murph API to generate audio from the TTS content 
+            const response = await generateAudioFromText({
+                text: ttsText,
+                voiceId: selectedVoice
+            });
+
+
+            // Set the generated audio file if the response is successful 
+            if (response.success && response.audioFile) {
+                setGeneratedAudio(response.audioFile);
+                toast.success('🎵 Audio generated successfully!', {
+                    description: `Duration: ~${estimateAudioDuration(ttsText)}`,
+                });
+                
+            } else {
+
+                // Gives an error message if audio generation fails 
+                setAudioError(response.error || 'Failed to generate audio');
+                toast.error('Failed to generate audio', {
+                    description: response.error || 'Unknown error occurred'
+                });
+            }
+
+        } catch (error: any) {
+            const errorMessage = (error as any).message || 'Unexpected error occurred';
+            setAudioError(errorMessage);
+            toast.error('Audio generation failed', {
+                description: errorMessage
+            });
+        } finally {
+            setIsGeneratingAudio(false);
+        }
+    };
+
+
+// Using React to manage audio playback
+    const playAudio = () => {
+        if (generatedAudio && typeof window !== 'undefined') {
+            const audio = new Audio(generatedAudio);
+            audio.play();
+            setIsPlaying(true);
+
+            audio.onended = () => setIsPlaying(false);
+            audio.onerror = () => {
+                setIsPlaying(false);
+                toast.error('Failed to play audio');
+            };
+        }
+    };
+
+    // Download audio file 
+    const downloadAudio = () => {
+        if (generatedAudio && typeof window !== 'undefined') {
+            const link = document.createElement('a');
+            link.href = generatedAudio;
+            link.download = `${finalizedContent?.title || 'podcast'}-audio.mp3`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            toast.success('Audio download started');
+        }
     };
 
     return (
@@ -239,9 +375,9 @@ const Page = () => {
                     </h1>
                 </div>
                 <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                    {"Simply share your podcast idea and let AI create professional, engaging content tailored to your chosen theme. "}
-                    {"Generate complete episodes with titles, descriptions, and full scripts in seconds."}                
-                    </p>
+                    Simply share your podcast idea and let AI create professional, engaging content tailored to your chosen theme.
+                    Generate complete episodes with titles, descriptions, and full scripts in seconds.
+                </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -265,8 +401,8 @@ const Page = () => {
                                     placeholder="Describe your podcast idea... (e.g., 'The impact of artificial intelligence on modern education')"
                                     value={podcastIdea}
                                     onChange={(e) => setPodcastIdea(e.target.value)}
-                                    rows={16}
-                                    className="transition-all duration-200 focus:ring-2 focus:ring-blue-400 resize-none min-h-42"
+                                    rows={10}
+                                    className="transition-all duration-200 focus:ring-2 focus:ring-primary/20 resize-none"
                                 />
                                 <div className="text-xs text-muted-foreground mt-1">
                                     {podcastIdea.trim().split(/\s+/).filter(word => word.length > 0).length} words
@@ -641,8 +777,193 @@ const Page = () => {
                     </Card>
                 </div>
             </div>
+
+            {/* TTS Section */}
+            {finalizedContent && (
+                <div className="mt-8">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Volume2 className="h-5 w-5" />
+                                Generate Audio
+                            </CardTitle>
+                            <CardDescription>
+                                Convert your finalized podcast content to audio using AI voice synthesis
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Finalized Content Preview */}
+                            <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <CheckCircle className="h-4 w-4 text-green-600" />
+                                    <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+                                        Content Ready for Audio
+                                    </Badge>
+                                </div>
+                                <h3 className="font-medium text-sm text-gray-700">{finalizedContent.title}</h3>
+                                <p className="text-xs text-gray-600 mt-1">
+                                    ~{estimateAudioDuration(createTTSContent(finalizedContent))} estimated duration
+                                </p>
+                            </div>
+
+                            {/* Voice Selection */}
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <Label htmlFor="voice-select">Select Voice</Label>
+                                        <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                                            <SelectTrigger id="voice-select">
+                                                <SelectValue placeholder="Choose a voice" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {VOICE_OPTIONS.map((voice) => (
+                                                    <SelectItem key={voice.value} value={voice.value}>
+                                                        <div className="flex items-center justify-between w-full">
+                                                            <span>{voice.label}</span>
+                                                            <Badge variant="outline" className="ml-2 text-xs">
+                                                                {voice.accent}
+                                                            </Badge>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="flex items-end">
+                                        <Button
+                                            onClick={generateAudio}
+                                            disabled={isGeneratingAudio || !finalizedContent}
+                                            className="w-full group"
+                                        >
+                                            {isGeneratingAudio ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                                    Generating Audio...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Mic className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                                    Generate Audio
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+
+                                {/* Progress indicator for audio generation */}
+                                {isGeneratingAudio && (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-sm text-muted-foreground">
+                                            <span>Generating audio with {VOICE_OPTIONS.find(v => v.value === selectedVoice)?.label}...</span>
+                                            <span>This may take a few moments</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full animate-pulse w-3/4"></div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Audio Error Display */}
+                                {audioError && (
+                                    <Alert className="border-red-200 bg-red-50">
+                                        <AlertCircle className="h-4 w-4 text-red-600" />
+                                        <AlertDescription className="text-red-800">
+                                            <strong>Audio Generation Failed:</strong> {audioError}
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+
+                                {/* Generated Audio Player */}
+                                {generatedAudio && (
+                                    <div className="space-y-4">
+                                        <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <Volume2 className="h-4 w-4 text-purple-600" />
+                                                <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-200">
+                                                    Audio Ready
+                                                </Badge>
+                                            </div>
+
+                                            {/* Audio Player */}
+                                            <div className="space-y-3">
+                                                <audio
+                                                    controls
+                                                    className="w-full"
+                                                    src={generatedAudio}
+                                                    onPlay={() => setIsPlaying(true)}
+                                                    onPause={() => setIsPlaying(false)}
+                                                    onEnded={() => setIsPlaying(false)}
+                                                >
+                                                    Your browser does not support the audio element.
+                                                </audio>
+
+                                                {/* Audio Controls */}
+                                                <div className="flex gap-2 justify-center">
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={playAudio}
+                                                                    disabled={isPlaying}
+                                                                    className="group"
+                                                                >
+                                                                    {isPlaying ? (
+                                                                        <Pause className="h-4 w-4 mr-2" />
+                                                                    ) : (
+                                                                        <Play className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                                                    )}
+                                                                    {isPlaying ? 'Playing...' : 'Play'}
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>Play generated audio</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={downloadAudio}
+                                                                    className="group"
+                                                                >
+                                                                    <Download className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                                                    Download
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>Download audio file</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Instructions */}
+                                {!generatedAudio && !isGeneratingAudio && !audioError && (
+                                    <div className="text-center py-6 text-muted-foreground">
+                                        <Mic className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                                        <h3 className="font-medium mb-1">{"Ready to Generate Audio"}</h3>
+                                        <p className="text-sm">{"Select your preferred voice and click \"Generate Audio\" to create an audio version of your podcast content."}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     )
 }
 
 export default Page
+
