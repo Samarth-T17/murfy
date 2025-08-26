@@ -95,13 +95,15 @@ const Page = () => {
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
         description: '',
-        content: ''
+        content: '', 
+        names: []
     });
 
     const [editedContent, setEditedContent] = useState<PodcastContent>({
         title: '',
         description: '',
-        content: ''
+        content: '',
+        names: []
     });
 
     const [selectedTheme, setSelectedTheme] = useState<string>('');
@@ -188,8 +190,8 @@ const Page = () => {
 
     const discardContent = (type: 'generated' | 'edited') => {
         if (type === 'generated') {
-            setGeneratedContent({ title: '', description: '', content: '' });
-            setEditedContent({ title: '', description: '', content: '' });
+            setGeneratedContent({ title: '', description: '', content: '' , names: []});
+            setEditedContent({ title: '', description: '', content: '' , names: []});
             setHasGenerated(false);
             setPodcastIdea('');
             toast.success('Generated content discarded');
@@ -272,7 +274,6 @@ const Page = () => {
                                     {podcastIdea.trim().split(/\s+/).filter(word => word.length > 0).length} words
                                 </div>
                             </div>
-
                             <div>
                                 <Label className="mb-3" htmlFor="theme-select">Select Theme</Label>
                                 <Select value={selectedTheme} onValueChange={setSelectedTheme}>

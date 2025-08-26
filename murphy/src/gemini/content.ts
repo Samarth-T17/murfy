@@ -54,7 +54,8 @@ const themePrompts = {
 // Enhanced function to generate content from podcast idea
 export async function generateContentFromIdea(
     idea: string,
-    theme: string
+    theme: string,
+    names: string[]
 ): Promise<PodcastContent> {
     const themeConfig = themePrompts[theme as keyof typeof themePrompts];
 
@@ -82,23 +83,27 @@ Style guidelines: ${themeConfig.style}
 
 Podcast Idea: "${idea}"
 
-Please create a full podcast episode including:
-1. An engaging title that captures the essence of the idea
-2. A compelling description that would attract listeners (2-3 sentences)
-3. Complete podcast content/script that explores the idea thoroughly (should be substantial, at least 500-800 words)
+Characters: "${names.join(', ')}"
+You will be given the character names, and you must write the entire podcast content as a conversation between only those characters in the following format:
+Alice: "…"
+Bob: "…"
 
-The content should be ready-to-use for a podcast episode, with natural flow, engaging segments, and appropriate pacing for the ${theme} style.
+Requirements:
+1. Include an engaging title that captures the essence of the idea.
+2. Write a compelling description (2-3 sentences) that would attract listeners.
+3. The full podcast script/content should be substantial (at least 500-800 words), written entirely as dialogue between the provided characters (maximum of 3).
+4. Do not return the character names in a separate array — just use them directly in the dialogue.
 
 Respond in this exact JSON format:
 {
   "title": "engaging podcast title here",
-  "description": "compelling 2-3 sentence description here", 
-  "content": "complete podcast script/content here (substantial length)"
+  "description": "compelling 2-3 sentence description here",
+  "content": "complete podcast script/content here in dialogue format (substantial length)"
 }
         `;
 
         const result = await model.generateContent(prompt);
-        const response = await result.response;
+        const response = result.response;
         const text = response.text();
         
         // Try to parse JSON response
