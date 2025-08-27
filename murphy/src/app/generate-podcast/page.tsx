@@ -12,8 +12,6 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { toast } from 'sonner'
 import {
     Sparkles,
@@ -31,7 +29,11 @@ import {
     Users,
     Plus,
     X,
-    UserPlus
+    UserPlus,
+    Play,
+    Pause,
+    Download,
+    Headphones
 } from 'lucide-react'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
@@ -95,14 +97,42 @@ const themes = [
     }
 ];
 
+const voiceOptions = [
+    {
+        name: "Natalie",
+        voice_id: "en-US-natalie",
+        style: "Conversational"
+    },
+    {
+        name: "Ken",
+        voice_id: "en-US-ken",
+        style: "Conversational"
+    },
+    {
+        name: "Sarah",
+        voice_id: "en-US-sarah",
+        style: "Conversational"
+    },
+    {
+        name: "Marcus",
+        voice_id: "en-US-marcus",
+        style: "Conversational"
+    },
+    {
+        name: "Emma",
+        voice_id: "en-US-emma",
+        style: "Conversational"
+    }
+]
+
 const Page = () => {
     const [podcastIdea, setPodcastIdea] = useState<string>('');
     const [speakerNames, setSpeakerNames] = useState<string[]>([]);
-    const [newSpeakerName, setNewSpeakerName] = useState<string>('');
+    const [selectedVoiceForNewSpeaker, setSelectedVoiceForNewSpeaker] = useState<string>('');
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
         description: '',
-        content: '', 
+        content: '',
         names: []
     });
 
@@ -118,6 +148,10 @@ const Page = () => {
     const [hasGenerated, setHasGenerated] = useState(false);
     const [activeTab, setActiveTab] = useState('generated');
     const [editingContent, setEditingContent] = useState(false);
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+    const [generatedAudioUrl, setGeneratedAudioUrl] = useState<string>('');
+    const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+    const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
     const [wordCounts, setWordCounts] = useState({
         generatedTitle: 0,
         generatedDescription: 0,
@@ -142,21 +176,21 @@ const Page = () => {
         setWordCounts(counts);
     }, [generatedContent, editedContent]);
 
-    // Helper functions for managing speaker names
-    const addSpeakerName = () => {
-        const trimmedName = newSpeakerName.trim();
-        if (trimmedName && !speakerNames.includes(trimmedName) && speakerNames.length < SPEAKER_MAX_LIMIT) {
-            setSpeakerNames([...speakerNames, trimmedName]);
-            setNewSpeakerName('');
-            toast.success(`Added ${trimmedName} as a speaker`, {
+    // Helper functions for managing speaker voices
+    const addSpeakerVoice = () => {
+        if (selectedVoiceForNewSpeaker && !speakerNames.includes(selectedVoiceForNewSpeaker) && speakerNames.length < SPEAKER_MAX_LIMIT) {
+            const selectedVoice = voiceOptions.find(voice => voice.voice_id === selectedVoiceForNewSpeaker);
+            setSpeakerNames([...speakerNames, selectedVoice?.name || selectedVoiceForNewSpeaker]);
+            setSelectedVoiceForNewSpeaker('');
+            toast.success(`Added ${selectedVoice?.name} as a speaker`, {
                 description: `You now have ${speakerNames.length + 1} speaker${speakerNames.length + 1 > 1 ? 's' : ''}`,
             });
-        } else if (speakerNames.includes(trimmedName)) {
-            toast.error('Speaker name already exists');
-        } else if (speakerNames.length >= 3) {
-            toast.error('Maximum 3 speakers allowed');
+        } else if (speakerNames.includes(selectedVoiceForNewSpeaker)) {
+            toast.error('This voice is already selected');
+        } else if (speakerNames.length >= SPEAKER_MAX_LIMIT) {
+            toast.error(`Maximum ${SPEAKER_MAX_LIMIT} speakers allowed`);
         } else {
-            toast.error('Please enter a valid name');
+            toast.error('Please select a voice');
         }
     };
 
@@ -171,9 +205,110 @@ const Page = () => {
 
     const resetSpeakerNames = () => {
         setSpeakerNames([]);
-        setNewSpeakerName('');
-        toast.info('Reset to default speakers');
+        setSelectedVoiceForNewSpeaker('');
+        toast.info('Reset speakers');
     };
+
+    // Get available voices that haven't been selected yet
+    const getAvailableVoices = () => {
+        return voiceOptions.filter(voice => !speakerNames.includes(voice.name));
+    };
+
+    // Audio generation functions
+    const generateAudio = async (content: PodcastContent) => {
+        if (!content.content.trim()) {
+            toast.error('No content available to generate audio');
+            return;
+        }
+
+        if (speakerNames.length === 0) {
+            toast.error('No speakers available for audio generation');
+            return;
+        }
+
+        // Map speaker names to their corresponding voice IDs
+        const voices = speakerNames.map(speakerName => {
+            const voice = voiceOptions.find(v => v.name === speakerName);
+            return voice ? voice.voice_id : voiceOptions[0].voice_id; // fallback to first voice
+        });
+
+        setIsGeneratingAudio(true);
+        toast.info('Generating podcast audio... This may take a few minutes.');
+
+        try {
+            const response = await fetch('/api/generate-audio', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    content: content.content,
+                    names: speakerNames,
+                    speakers: voices
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to generate audio');
+            }
+
+            // Convert base64 to blob and create URL
+            const audioBlob = new Blob([Uint8Array.from(atob(data.audio), c => c.charCodeAt(0))], {
+                type: data.mimeType
+            });
+            const audioUrl = URL.createObjectURL(audioBlob);
+
+            setGeneratedAudioUrl(audioUrl);
+            toast.success('🎵 Audio generated successfully!', {
+                description: 'Your podcast is ready to listen to',
+                duration: 4000,
+            });
+
+        } catch (error) {
+            console.error('Audio generation error:', error);
+            toast.error('Failed to generate audio', {
+                description: error instanceof Error ? error.message : 'Unknown error occurred',
+            });
+        } finally {
+            setIsGeneratingAudio(false);
+        }
+    };
+
+    const playPauseAudio = () => {
+        if (!audioRef) return;
+
+        if (isPlayingAudio) {
+            audioRef.pause();
+            setIsPlayingAudio(false);
+        } else {
+            audioRef.play();
+            setIsPlayingAudio(true);
+        }
+    };
+
+    const downloadAudio = () => {
+        if (!generatedAudioUrl) return;
+
+        const link = document.createElement('a');
+        link.href = generatedAudioUrl;
+        link.download = `podcast-${Date.now()}.mp3`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        toast.success('Audio download started!');
+    };
+
+    // Clean up audio URL when component unmounts
+    React.useEffect(() => {
+        return () => {
+            if (generatedAudioUrl) {
+                URL.revokeObjectURL(generatedAudioUrl);
+            }
+        };
+    }, [generatedAudioUrl]);
 
     const handleEditedContentChange = (field: keyof PodcastContent, value: string) => {
         setEditedContent(prev => ({
@@ -237,8 +372,8 @@ const Page = () => {
 
     const discardContent = (type: 'generated' | 'edited') => {
         if (type === 'generated') {
-            setGeneratedContent({ title: '', description: '', content: '' , names: []});
-            setEditedContent({ title: '', description: '', content: '' , names: []});
+            setGeneratedContent({ title: '', description: '', content: '', names: [] });
+            setEditedContent({ title: '', description: '', content: '', names: [] });
             setHasGenerated(false);
             setPodcastIdea('');
             toast.success('Generated content discarded');
@@ -248,7 +383,7 @@ const Page = () => {
         }
     };
 
-    const finalizeContent = (content: PodcastContent, type: 'generated' | 'edited') => {
+    const finalizeContent = async (content: PodcastContent, type: 'generated' | 'edited') => {
         // Here you would save the finalized content to your backend
         const contentType = type === 'generated' ? 'AI-Generated' : 'Edited';
         const themeLabel = themes.find(t => t.value === selectedTheme)?.label || 'None';
@@ -260,6 +395,11 @@ const Page = () => {
                 duration: 4000,
             }
         );
+
+        // Generate audio automatically after finalizing
+        if (speakerNames.length > 0) {
+            await generateAudio(content);
+        }
 
         // Optional: Reset state or redirect user
         console.log('Finalized content:', {
@@ -289,8 +429,8 @@ const Page = () => {
                 </div>
                 <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
                     {"Simply share your podcast idea and let AI create professional, engaging content tailored to your chosen theme. "}
-                    {"Generate complete episodes with titles, descriptions, and full scripts in seconds."}                
-                    </p>
+                    {"Generate complete episodes with titles, descriptions, and full scripts in seconds."}
+                </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -342,7 +482,7 @@ const Page = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            
+
                             {/* Speaker Names Section */}
                             <div>
                                 <div className="flex items-center justify-between mb-3">
@@ -351,55 +491,69 @@ const Page = () => {
                                         {speakerNames.length}/{SPEAKER_MAX_LIMIT} speakers
                                     </Badge>
                                 </div>
-                                
+
                                 {/* Current Speakers */}
                                 <div className="space-y-2 mb-3">
-                                    {speakerNames.map((name, index) => (
-                                        <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-                                            <div className="flex items-center gap-2">
-                                                <div className="p-1.5 rounded-full bg-primary/10">
-                                                    <Users className="h-3 w-3 text-primary" />
+                                    {speakerNames.map((name, index) => {
+                                        const voice = voiceOptions.find(v => v.name === name);
+                                        return (
+                                            <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-1.5 rounded-full bg-primary/10">
+                                                        <Users className="h-3 w-3 text-primary" />
+                                                    </div>
+                                                    <span className="font-medium text-sm">{name}</span>
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        Speaker {index + 1}
+                                                    </Badge>
+                                                    {voice && (
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {voice.style}
+                                                        </Badge>
+                                                    )}
                                                 </div>
-                                                <span className="font-medium text-sm">{name}</span>
-                                                <Badge variant="secondary" className="text-xs">
-                                                    Speaker {index + 1}
-                                                </Badge>
+                                                {speakerNames.length > 1 && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        onClick={() => removeSpeakerName(name)}
+                                                        className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                                    >
+                                                        <X className="h-3 w-3" />
+                                                    </Button>
+                                                )}
                                             </div>
-                                            {speakerNames.length > 1 && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => removeSpeakerName(name)}
-                                                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
-                                                >
-                                                    <X className="h-3 w-3" />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
 
                                 {/* Add New Speaker */}
-                                {speakerNames.length < SPEAKER_MAX_LIMIT && (
+                                {speakerNames.length < SPEAKER_MAX_LIMIT && getAvailableVoices().length > 0 && (
                                     <div className="flex gap-2">
-                                        <Input
-                                            placeholder="Enter speaker name..."
-                                            value={newSpeakerName}
-                                            onChange={(e) => setNewSpeakerName(e.target.value)}
-                                            onKeyPress={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
-                                                    addSpeakerName();
-                                                }
-                                            }}
-                                            className="flex-1"
-                                        />
+                                        <Select value={selectedVoiceForNewSpeaker} onValueChange={setSelectedVoiceForNewSpeaker}>
+                                            <SelectTrigger className="flex-1">
+                                                <SelectValue placeholder="Select a voice..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {getAvailableVoices().map((voice) => (
+                                                    <SelectItem key={voice.voice_id} value={voice.voice_id}>
+                                                        <div className="flex items-center gap-2">
+                                                            <Users className="h-3 w-3" />
+                                                            <span className="font-medium">{voice.name}</span>
+                                                            <Badge variant="outline" className="text-xs">
+                                                                {voice.style}
+                                                            </Badge>
+                                                        </div>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
                                                     <Button
-                                                        onClick={addSpeakerName}
-                                                        disabled={!newSpeakerName.trim()}
+                                                        onClick={addSpeakerVoice}
+                                                        disabled={!selectedVoiceForNewSpeaker}
                                                         size="sm"
                                                         className="shrink-0"
                                                     >
@@ -414,6 +568,14 @@ const Page = () => {
                                     </div>
                                 )}
 
+                                {/* Show message when all voices are used */}
+                                {speakerNames.length < SPEAKER_MAX_LIMIT && getAvailableVoices().length === 0 && (
+                                    <div className="text-xs text-muted-foreground p-2 bg-amber-50 rounded border-l-2 border-amber-200">
+                                        <Info className="h-3 w-3 inline mr-1" />
+                                        All available voices have been selected. Remove a speaker to add a different voice.
+                                    </div>
+                                )}
+
                                 {/* Quick Actions */}
                                 <div className="flex gap-2 mt-3">
                                     <Button
@@ -423,13 +585,13 @@ const Page = () => {
                                         className="text-xs"
                                     >
                                         <UserPlus className="h-3 w-3 mr-1" />
-                                        Reset to Default
+                                        Reset Speakers
                                     </Button>
                                 </div>
-                                
+
                                 <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
                                     <Info className="h-3 w-3 inline mr-1" />
-                                    Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed.
+                                    Select from {voiceOptions.length} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed.
                                 </div>
                             </div>
 
@@ -597,6 +759,81 @@ const Page = () => {
                                                 />
                                             </div>
 
+                                            {/* Audio Player Section */}
+                                            {(generatedAudioUrl || isGeneratingAudio) && (
+                                                <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <Headphones className="h-4 w-4 text-purple-600" />
+                                                            <span className="font-medium text-purple-800">Generated Audio</span>
+                                                            <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-200">
+                                                                MP3
+                                                            </Badge>
+                                                        </div>
+                                                        {!isGeneratingAudio && generatedAudioUrl && (
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={downloadAudio}
+                                                                className="hover:bg-purple-100"
+                                                            >
+                                                                <Download className="h-3 w-3 mr-1" />
+                                                                Download
+                                                            </Button>
+                                                        )}
+                                                    </div>
+
+                                                    {isGeneratingAudio ? (
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600" />
+                                                                <span className="text-sm text-purple-700">Generating audio...</span>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Skeleton className="h-2 w-full" />
+                                                                <Skeleton className="h-2 w-3/4" />
+                                                            </div>
+                                                            <p className="text-xs text-purple-600">This may take a few minutes depending on content length</p>
+                                                        </div>
+                                                    ) : generatedAudioUrl ? (
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={playPauseAudio}
+                                                                    className="shrink-0"
+                                                                >
+                                                                    {isPlayingAudio ? (
+                                                                        <Pause className="h-4 w-4" />
+                                                                    ) : (
+                                                                        <Play className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                                <div className="flex-1">
+                                                                    <audio
+                                                                        ref={setAudioRef}
+                                                                        src={generatedAudioUrl}
+                                                                        onPlay={() => setIsPlayingAudio(true)}
+                                                                        onPause={() => setIsPlayingAudio(false)}
+                                                                        onEnded={() => setIsPlayingAudio(false)}
+                                                                        controls
+                                                                        className="w-full"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {speakerNames.map((name, index) => (
+                                                                    <Badge key={index} variant="secondary" className="text-xs">
+                                                                        {name}: {voiceOptions[index % voiceOptions.length].name}
+                                                                    </Badge>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
+
                                             <div className="flex justify-between pt-4 border-t">
                                                 <div className="flex gap-2">
                                                     <TooltipProvider>
@@ -613,6 +850,25 @@ const Page = () => {
                                                             </TooltipTrigger>
                                                             <TooltipContent>
                                                                 <p>Copy generated content to clipboard</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={() => generateAudio(generatedContent)}
+                                                                    disabled={isGeneratingAudio}
+                                                                    className="group hover:bg-blue-50"
+                                                                >
+                                                                    <Volume2 className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                                                    Generate Audio
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>Generate audio from this content</p>
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TooltipProvider>
@@ -655,9 +911,9 @@ const Page = () => {
                                                     <Alert className="mt-4">
                                                         <Info className="h-4 w-4" />
                                                         <AlertDescription>
-                                                            {!podcastIdea.trim() 
-                                                                ? 'Enter your podcast idea first.' 
-                                                                : !selectedTheme 
+                                                            {!podcastIdea.trim()
+                                                                ? 'Enter your podcast idea first.'
+                                                                : !selectedTheme
                                                                     ? 'Select a theme to get started.'
                                                                     : 'Add at least one speaker to generate content.'
                                                             }
@@ -694,7 +950,7 @@ const Page = () => {
                                                     {editingContent ? 'Stop Editing' : 'Enable Editing'}
                                                 </Button>
                                             </div>
-                                            
+
                                             {speakerNames.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 mb-3">
                                                     {speakerNames.map((name, index) => (
@@ -755,6 +1011,93 @@ const Page = () => {
                                                 />
                                             </div>
 
+                                            {/* Audio Player Section for Edited Content */}
+                                            {(generatedAudioUrl || isGeneratingAudio) && (
+                                                <div className="p-4 bg-gradient-to-r from-orange-50 to-blue-50 rounded-lg border border-orange-200">
+                                                    <div className="flex items-center justify-between mb-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <Headphones className="h-4 w-4 text-orange-600" />
+                                                            <span className="font-medium text-orange-800">Generated Audio</span>
+                                                            <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">
+                                                                MP3
+                                                            </Badge>
+                                                        </div>
+                                                        {!isGeneratingAudio && generatedAudioUrl && (
+                                                            <div className="flex gap-2">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => generateAudio(editedContent)}
+                                                                    disabled={isGeneratingAudio}
+                                                                    className="hover:bg-orange-100"
+                                                                >
+                                                                    <Volume2 className="h-3 w-3 mr-1" />
+                                                                    Regenerate
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={downloadAudio}
+                                                                    className="hover:bg-orange-100"
+                                                                >
+                                                                    <Download className="h-3 w-3 mr-1" />
+                                                                    Download
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {isGeneratingAudio ? (
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600" />
+                                                                <span className="text-sm text-orange-700">Generating audio from edited content...</span>
+                                                            </div>
+                                                            <div className="space-y-1">
+                                                                <Skeleton className="h-2 w-full" />
+                                                                <Skeleton className="h-2 w-3/4" />
+                                                            </div>
+                                                            <p className="text-xs text-orange-600">This may take a few minutes depending on content length</p>
+                                                        </div>
+                                                    ) : generatedAudioUrl ? (
+                                                        <div className="space-y-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={playPauseAudio}
+                                                                    className="shrink-0"
+                                                                >
+                                                                    {isPlayingAudio ? (
+                                                                        <Pause className="h-4 w-4" />
+                                                                    ) : (
+                                                                        <Play className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                                <div className="flex-1">
+                                                                    <audio
+                                                                        ref={setAudioRef}
+                                                                        src={generatedAudioUrl}
+                                                                        onPlay={() => setIsPlayingAudio(true)}
+                                                                        onPause={() => setIsPlayingAudio(false)}
+                                                                        onEnded={() => setIsPlayingAudio(false)}
+                                                                        controls
+                                                                        className="w-full"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-1">
+                                                                {speakerNames.map((name, index) => (
+                                                                    <Badge key={index} variant="secondary" className="text-xs">
+                                                                        {name}: {voiceOptions[index % voiceOptions.length].name}
+                                                                    </Badge>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                            )}
+
                                             <div className="flex justify-between pt-4 border-t">
                                                 <div className="flex gap-2">
                                                     <TooltipProvider>
@@ -771,6 +1114,25 @@ const Page = () => {
                                                             </TooltipTrigger>
                                                             <TooltipContent>
                                                                 <p>Copy edited content to clipboard</p>
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    </TooltipProvider>
+
+                                                    <TooltipProvider>
+                                                        <Tooltip>
+                                                            <TooltipTrigger asChild>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    onClick={() => generateAudio(editedContent)}
+                                                                    disabled={isGeneratingAudio}
+                                                                    className="group hover:bg-orange-50"
+                                                                >
+                                                                    <Volume2 className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
+                                                                    Generate Audio
+                                                                </Button>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                <p>Generate audio from edited content</p>
                                                             </TooltipContent>
                                                         </Tooltip>
                                                     </TooltipProvider>
