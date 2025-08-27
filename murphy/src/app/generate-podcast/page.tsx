@@ -795,7 +795,7 @@ const Page = () => {
                                                 </div>
                                                 <Button
                                                     onClick={() => finalizeContent(editedContent, 'edited')}
-                                                    className="group bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700"
+                                                    className="group bg-gradient-to-r bg-black"
                                                 >
                                                     <Save className="h-4 w-4 mr-2 group-hover:scale-110 transition-transform" />
                                                     Finalize Edited
