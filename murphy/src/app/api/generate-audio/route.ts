@@ -65,4 +65,28 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+
+//     const content = `
+//     Sarah: Welcome to ‘Project Momentum,’ the podcast dedicated to optimizing project delivery. Today, we’re tackling a pervasive issue that significantly impacts project timelines and budgets: the ‘yo-yo’ effect.  Ken and Marcus, welcome to the show.
+
+// Ken: Thank you, Sarah.  It's a pleasure to be here.
+
+// Marcus:  Likewise. The yo-yo effect is something I've witnessed firsthand in numerous projects, and it's rarely beneficial.
+//     `;
+
+//     const names = ["Sarah", "Ken", "Marcus"];
+//     const speakers = ["en-US-natalie", "en-US-ken", "en-US-charles"];
+//     const audioFilePath = await generatePodcastAudio(content, names, speakers);
+
+//     console.log(`Generated audio file at: ${audioFilePath}`);
+//       const fileBuffer = fs.readFileSync(audioFilePath);
+
+//   return new NextResponse(fileBuffer, {
+//     status: 200,
+//     headers: {
+//       "Content-Type": "audio/mpeg",   // correct MIME type for MP3
+//       "Content-Disposition": `attachment; filename="podcast.mp3"`,
+//     },
+//   });
+
 }
