@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
 import { toast } from 'sonner'
 import {
     Sparkles,
@@ -26,7 +28,10 @@ import {
     Info,
     Mic,
     Volume2,
-    Users
+    Users,
+    Plus,
+    X,
+    UserPlus
 } from 'lucide-react'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
@@ -92,6 +97,8 @@ const themes = [
 
 const Page = () => {
     const [podcastIdea, setPodcastIdea] = useState<string>('');
+    const [speakerNames, setSpeakerNames] = useState<string[]>([]);
+    const [newSpeakerName, setNewSpeakerName] = useState<string>('');
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
         description: '',
@@ -120,6 +127,8 @@ const Page = () => {
         editedContent: 0
     });
 
+    const SPEAKER_MAX_LIMIT = 5;
+
     // Update word counts when content changes
     React.useEffect(() => {
         const counts = {
@@ -132,6 +141,39 @@ const Page = () => {
         };
         setWordCounts(counts);
     }, [generatedContent, editedContent]);
+
+    // Helper functions for managing speaker names
+    const addSpeakerName = () => {
+        const trimmedName = newSpeakerName.trim();
+        if (trimmedName && !speakerNames.includes(trimmedName) && speakerNames.length < SPEAKER_MAX_LIMIT) {
+            setSpeakerNames([...speakerNames, trimmedName]);
+            setNewSpeakerName('');
+            toast.success(`Added ${trimmedName} as a speaker`, {
+                description: `You now have ${speakerNames.length + 1} speaker${speakerNames.length + 1 > 1 ? 's' : ''}`,
+            });
+        } else if (speakerNames.includes(trimmedName)) {
+            toast.error('Speaker name already exists');
+        } else if (speakerNames.length >= 3) {
+            toast.error('Maximum 3 speakers allowed');
+        } else {
+            toast.error('Please enter a valid name');
+        }
+    };
+
+    const removeSpeakerName = (nameToRemove: string) => {
+        if (speakerNames.length <= 1) {
+            toast.error('At least one speaker is required');
+            return;
+        }
+        setSpeakerNames(speakerNames.filter(name => name !== nameToRemove));
+        toast.success(`Removed ${nameToRemove} from speakers`);
+    };
+
+    const resetSpeakerNames = () => {
+        setSpeakerNames([]);
+        setNewSpeakerName('');
+        toast.info('Reset to default speakers');
+    };
 
     const handleEditedContentChange = (field: keyof PodcastContent, value: string) => {
         setEditedContent(prev => ({
@@ -151,12 +193,17 @@ const Page = () => {
             return;
         }
 
+        if (speakerNames.length === 0) {
+            toast.error('Please add at least one speaker');
+            return;
+        }
+
         setIsGenerating(true);
         toast.info('Generating podcast content from your idea...');
 
         try {
-            // Use the Gemini service to generate content from idea
-            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme);
+            // Use the Gemini service to generate content from idea with dynamic speaker names
+            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme, speakerNames);
 
             setGeneratedContent(generatedPodcast);
             setEditedContent(generatedPodcast); // Initialize edited content with generated content
@@ -256,7 +303,7 @@ const Page = () => {
                                 AI Content Generation
                             </CardTitle>
                             <CardDescription>
-                                Enter your podcast idea and choose a theme to generate complete content
+                                Enter your podcast idea, choose speakers, and select a theme to generate complete content
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -285,15 +332,105 @@ const Page = () => {
                                             <SelectItem key={theme.value} value={theme.value}>
                                                 <div className="flex items-center gap-3">
                                                     <theme.icon className="h-4 w-4" />
-                                                    <div>
-                                                        <div className="font-medium">{theme.label}</div>
-                                                        <div className="text-sm text-muted-foreground">{theme.description}</div>
+                                                    <div className='flex items-center justify-center gap-2'>
+                                                        <div className="font-medium text-sm">{theme.label}</div>
+                                                        <div className="text-xs text-muted-foreground">{theme.description}</div>
                                                     </div>
                                                 </div>
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
+                            </div>
+                            
+                            {/* Speaker Names Section */}
+                            <div>
+                                <div className="flex items-center justify-between mb-3">
+                                    <Label htmlFor="speaker-names">Podcast Speakers</Label>
+                                    <Badge variant="outline" className="text-xs">
+                                        {speakerNames.length}/{SPEAKER_MAX_LIMIT} speakers
+                                    </Badge>
+                                </div>
+                                
+                                {/* Current Speakers */}
+                                <div className="space-y-2 mb-3">
+                                    {speakerNames.map((name, index) => (
+                                        <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
+                                            <div className="flex items-center gap-2">
+                                                <div className="p-1.5 rounded-full bg-primary/10">
+                                                    <Users className="h-3 w-3 text-primary" />
+                                                </div>
+                                                <span className="font-medium text-sm">{name}</span>
+                                                <Badge variant="secondary" className="text-xs">
+                                                    Speaker {index + 1}
+                                                </Badge>
+                                            </div>
+                                            {speakerNames.length > 1 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeSpeakerName(name)}
+                                                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Add New Speaker */}
+                                {speakerNames.length < SPEAKER_MAX_LIMIT && (
+                                    <div className="flex gap-2">
+                                        <Input
+                                            placeholder="Enter speaker name..."
+                                            value={newSpeakerName}
+                                            onChange={(e) => setNewSpeakerName(e.target.value)}
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    addSpeakerName();
+                                                }
+                                            }}
+                                            className="flex-1"
+                                        />
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        onClick={addSpeakerName}
+                                                        disabled={!newSpeakerName.trim()}
+                                                        size="sm"
+                                                        className="shrink-0"
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Add speaker (max {SPEAKER_MAX_LIMIT})</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    </div>
+                                )}
+
+                                {/* Quick Actions */}
+                                <div className="flex gap-2 mt-3">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={resetSpeakerNames}
+                                        className="text-xs"
+                                    >
+                                        <UserPlus className="h-3 w-3 mr-1" />
+                                        Reset to Default
+                                    </Button>
+                                </div>
+                                
+                                <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
+                                    <Info className="h-3 w-3 inline mr-1" />
+                                    Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed.
+                                </div>
                             </div>
 
                             {selectedTheme && (
@@ -317,7 +454,7 @@ const Page = () => {
                                     <TooltipTrigger asChild>
                                         <Button
                                             onClick={generatePodcastContent}
-                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim()}
+                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim() || speakerNames.length === 0}
                                             className="w-full relative overflow-hidden group"
                                         >
                                             {isGenerating ? (
@@ -334,7 +471,7 @@ const Page = () => {
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>Enter your podcast idea and select a theme to generate complete content</p>
+                                        <p>Enter your podcast idea, select a theme, and add speakers to generate complete content</p>
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
@@ -388,12 +525,29 @@ const Page = () => {
                                     {hasGenerated ? (
                                         <div className="space-y-4">
                                             <div className="p-3 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border">
-                                                <div className="flex items-center gap-2">
-                                                    <CheckCircle className="h-4 w-4 text-green-600" />
-                                                    <Badge variant="outline" className={themes.find(t => t.value === selectedTheme)?.color}>
-                                                        Generated with {themes.find(t => t.value === selectedTheme)?.label} theme
-                                                    </Badge>
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                                        <Badge variant="outline" className={themes.find(t => t.value === selectedTheme)?.color}>
+                                                            Generated with {themes.find(t => t.value === selectedTheme)?.label} theme
+                                                        </Badge>
+                                                    </div>
+                                                    <div className="flex items-center gap-1">
+                                                        <Users className="h-3 w-3 text-muted-foreground" />
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {speakerNames.length} speaker{speakerNames.length > 1 ? 's' : ''}
+                                                        </span>
+                                                    </div>
                                                 </div>
+                                                {speakerNames.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1 mt-2">
+                                                        {speakerNames.map((name, index) => (
+                                                            <Badge key={index} variant="secondary" className="text-xs">
+                                                                {name}
+                                                            </Badge>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div>
@@ -495,13 +649,18 @@ const Page = () => {
                                             <div className="max-w-md mx-auto">
                                                 <Sparkles className="h-16 w-16 mx-auto mb-4 opacity-50" />
                                                 <h3 className="text-lg font-medium mb-2">No content generated yet</h3>
-                                                <p className="text-sm mb-4">Enter your podcast idea and select a theme to generate complete podcast content.</p>
+                                                <p className="text-sm mb-4">Enter your podcast idea, add speakers, and select a theme to generate complete podcast content.</p>
 
-                                                {(!podcastIdea.trim() || !selectedTheme) && (
+                                                {(!podcastIdea.trim() || !selectedTheme || speakerNames.length === 0) && (
                                                     <Alert className="mt-4">
                                                         <Info className="h-4 w-4" />
                                                         <AlertDescription>
-                                                            {!podcastIdea.trim() ? 'Enter your podcast idea first.' : 'Select a theme to get started.'}
+                                                            {!podcastIdea.trim() 
+                                                                ? 'Enter your podcast idea first.' 
+                                                                : !selectedTheme 
+                                                                    ? 'Select a theme to get started.'
+                                                                    : 'Add at least one speaker to generate content.'
+                                                            }
                                                         </AlertDescription>
                                                     </Alert>
                                                 )}
@@ -519,6 +678,12 @@ const Page = () => {
                                                     <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">
                                                         Editable Version
                                                     </Badge>
+                                                    <div className="flex items-center gap-1 ml-2">
+                                                        <Users className="h-3 w-3 text-muted-foreground" />
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {speakerNames.length} speaker{speakerNames.length > 1 ? 's' : ''}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <Button
                                                     variant="ghost"
@@ -529,6 +694,16 @@ const Page = () => {
                                                     {editingContent ? 'Stop Editing' : 'Enable Editing'}
                                                 </Button>
                                             </div>
+                                            
+                                            {speakerNames.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 mb-3">
+                                                    {speakerNames.map((name, index) => (
+                                                        <Badge key={index} variant="secondary" className="text-xs">
+                                                            {name}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            )}
 
                                             <div>
                                                 <div className="flex items-center justify-between mb-2">
