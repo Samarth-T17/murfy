@@ -17,8 +17,9 @@ export async function generatePodcastAudio(
     });
 
     const parsedContent = parsePodcastContent(content, voiceMap);
-
-
+    const audioFilePath = await generateAudio(parsedContent);
+    
+    return audioFilePath;
 }
 
 function parsePodcastContent(content : string, voiceMap: Map<string, string>) {
@@ -43,7 +44,9 @@ function parsePodcastContent(content : string, voiceMap: Map<string, string>) {
 
 export async function generateAudio(conversations: { [speaker: string]: string }[]): Promise<string> {
     const promises = conversations.map(async (dialogue, idx) => {
+      
         const [speaker, text] = Object.entries(dialogue)[0];
+        
         const data = { text, voiceId: speaker, style: "Conversational" };
 
 
@@ -61,6 +64,7 @@ export async function generateAudio(conversations: { [speaker: string]: string }
         );
 
         const audioUrl: string = response.data.audioFile;
+        console.log(`Generated audio URL for ${speaker}:`, audioUrl);
         const audioResponse = await axios.get<ArrayBuffer>(audioUrl, {
             responseType: "arraybuffer",
         });
@@ -69,8 +73,9 @@ export async function generateAudio(conversations: { [speaker: string]: string }
         fs.writeFileSync(filename, Buffer.from(audioResponse.data));
         console.log(`${speaker} -> saved ${filename}`);
         return filename;
-        } catch (err: any) {
-        console.error(`Error with ${speaker}:`, err.message || err);
+        } catch (err: unknown) {
+          
+        console.error(`Error with ${speaker}:`, err instanceof Error ? err.message : err);
         return null;
         }
     });
@@ -108,16 +113,16 @@ export async function generateAudio(conversations: { [speaker: string]: string }
             try {
               fs.unlinkSync(f);
               console.log(`🗑 Deleted ${f}`);
-            } catch (e: any) {
-              console.error(`Failed to delete ${f}:`, e.message);
+            } catch (e: unknown) {
+              console.error(`Failed to delete ${f}:`, e instanceof Error ? e.message : e);
             }
           }
 
           // cleanup list file
           try {
             fs.unlinkSync(listFile);
-          } catch (e: any) {
-            console.error(`Failed to delete temp list file:`, e.message);
+          } catch (e: unknown) {
+            console.error(`Failed to delete temp list file:`, e instanceof Error ? e.message : e);
           }
 
           resolve(outputFile);

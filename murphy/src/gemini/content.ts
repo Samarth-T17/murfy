@@ -3,11 +3,12 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-export interface PodcastContent {
+export type PodcastContent = {
     title: string;
     description: string;
     content: string;
-}
+    names: string[];
+};
 
 export interface Theme {
     value: string;
@@ -115,7 +116,8 @@ Respond in this exact JSON format:
                 return {
                     title: generatedContent.title || `Exploring: ${idea}`,
                     description: generatedContent.description || `An insightful discussion about ${idea}.`,
-                    content: generatedContent.content || `In this episode, we dive deep into ${idea}...`
+                    content: generatedContent.content || `In this episode, we dive deep into ${idea}...`,
+                    names: generatedContent.names || []
                 };
             } else {
                 console.warn('No JSON found in Gemini response, using fallback generation');
@@ -139,7 +141,8 @@ function mockGenerateFromIdea(idea: string, theme: string): Promise<PodcastConte
             resolve({
                 title: generateMockTitle(idea, theme),
                 description: generateMockDescription(idea, theme),
-                content: generateMockContent(idea, theme)
+                content: generateMockContent(idea, theme),
+                names: ["Alice", "Bob"]
             });
         }, 2000); // Simulate processing time
     });
@@ -232,3 +235,4 @@ Finally, let's wrap up with key takeaways. The most important thing to remember 
             return baseContent;
     }
 }
+
