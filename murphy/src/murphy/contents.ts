@@ -2,13 +2,13 @@ import axios from "axios";
 import fs from "fs";
 import { spawn } from "child_process";
 import os from "os";
-import path from "path";
-import { v4 as uuidv4 } from "uuid"; 
+import path from "path"; 
 
 export async function generatePodcastAudio(
     content: string,
     names: string[],
-    speakers: string[]
+    speakers: string[], 
+    uniqueId: string
 ): Promise<string> {
 
     const voiceMap = new Map<string, string>();
@@ -17,7 +17,7 @@ export async function generatePodcastAudio(
     });
 
     const parsedContent = parsePodcastContent(content, voiceMap);
-    const audioFilePath = await generateAudio(parsedContent);
+    const audioFilePath = await generateAudio(parsedContent, uniqueId);
     
     return audioFilePath;
 }
@@ -42,11 +42,9 @@ function parsePodcastContent(content : string, voiceMap: Map<string, string>) {
     return result;
 }
 
-export async function generateAudio(conversations: { [speaker: string]: string }[]): Promise<string> {
-    
+export async function generateAudio(conversations: { [speaker: string]: string }[], uniqueId: string): Promise<string> {
 
-    // Generate unique ID once
-    const uniqueId = uuidv4();
+
 
     const promises = conversations.map(async (dialogue, idx) => {
         const [speaker, text] = Object.entries(dialogue)[0];
@@ -94,7 +92,7 @@ export async function generateAudio(conversations: { [speaker: string]: string }
             fs.writeFileSync(listFile, files.map(f => `file '${path.resolve(f)}'`).join("\n"));
             console.log("Written list file contents:\n", fs.readFileSync(listFile, "utf-8"));
 
-            const outputFile = `${uniqueId}_final.mp3`;
+            const outputFile = path.join(os.tmpdir(), `${uniqueId}_final.mp3`);
 
             const ffmpegPath = process.env.FFMPEG_PATH!;
 

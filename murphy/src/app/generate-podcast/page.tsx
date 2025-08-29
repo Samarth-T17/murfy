@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
+import { title } from 'process';
 
 const themes = [
     {
@@ -244,7 +245,9 @@ const Page = () => {
                 body: JSON.stringify({
                     content: content.content,
                     names: speakerNames,
-                    speakers: voices
+                    speakers: voices,
+                    description: content.description,
+                    title: content.title
                 }),
             });
 

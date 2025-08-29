@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generatePodcastAudio } from '@/murphy/contents';
+import { uploadMp3 } from "@/lib/azureBlob";
+import { v4 as uuidv4 } from "uuid";
+import { addPodcast } from '@/lib/firebase';
 import fs from 'fs';
 import path from 'path';
 
 export async function POST(request: NextRequest) {
     try {
-        const { content, names, speakers } = await request.json();
+        const { content, names, speakers, description, title } = await request.json();
 
-        // Validate input
-        if (!content || !names || !speakers) {
+        if (!content || !names || !speakers || !description || !title) {
             return NextResponse.json(
-                { error: 'Missing required fields: content, names, speakers' },
+                { error: 'Missing required fields: content, names, speakers, description, title' },
                 { status: 400 }
             );
         }
@@ -30,23 +32,32 @@ export async function POST(request: NextRequest) {
         }
 
         console.log('Generating audio for content with speakers:', names, speakers);
-        
+        const podcastUniqueId = uuidv4();
 
-        // Generate audio
-        const audioFilePath = await generatePodcastAudio(content, names, speakers);
+        const audioFilePath = await generatePodcastAudio(content, names, speakers, podcastUniqueId);
 
-        // Read the generated audio file
+        const englishURL = await uploadMp3(audioFilePath, path.basename(audioFilePath));
+        const url = {
+            bengali: "",
+            english: englishURL,
+            french: "",
+            german: "",
+            hindi: "",
+            italian: "",
+            tamil: ""
+        };
+        await addPodcast(description, title, podcastUniqueId, content, uuidv4(), url);
+
+        console.log("File path:", audioFilePath);
         const audioBuffer = fs.readFileSync(audioFilePath);
         
-        // Convert to base64 for transmission
         const audioBase64 = audioBuffer.toString('base64');
-
-        // Clean up the temporary file
         try {
             fs.unlinkSync(audioFilePath);
         } catch (e) {
             console.warn('Failed to cleanup audio file:', e);
         }
+
 
         return NextResponse.json({
             success: true,
