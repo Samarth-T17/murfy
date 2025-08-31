@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "firebase": "^12.1.0",
-    "mongodb": "^6.19.0"
-  }
-}
