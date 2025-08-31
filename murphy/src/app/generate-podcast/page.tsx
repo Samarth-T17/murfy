@@ -426,6 +426,7 @@ const Page = () => {
 
     return (
         <div className='w-full'>
+            
               <Navigation />
         <div className="container mx-auto p-6 max-w-7xl">
             {/* Header Section */}
