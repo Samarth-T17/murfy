@@ -38,7 +38,7 @@ import {
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
 import { langVoiceMap } from '@/lib/langVoiceType';
-import { englishVoiceOptions, hindiVoiceOptions, bengaliVoiceOptions, frenchVoiceOptions, germanVoiceOptions, italianVoiceOptions, tamilVoiceOptions } from "@/lib/voices";
+import voicesData from "@/lib/voices";
 
 const themes = [
     {
@@ -109,6 +109,22 @@ const supportedLanguages = [
     { code: "tamil", label: "Tamil" }
 ];
 
+// Combine all voice options into one array for the current implementation
+const voiceOptions = [
+    ...voicesData.englishVoiceOptions,
+    ...voicesData.hindiVoiceOptions,
+    ...voicesData.bengaliVoiceOptions,
+    ...voicesData.frenchVoiceOptions,
+    ...voicesData.germanVoiceOptions,
+    ...voicesData.italianVoiceOptions,
+    ...voicesData.tamilVoiceOptions
+];
+
+type VoiceOption = {
+    name: string;
+    voice_id: string;
+};
+
 const Page = () => {
     const [podcastIdea, setPodcastIdea] = useState<string>('');
     const [speakerNamesByLang, setSpeakerNamesByLang] = useState<{ [lang: string]: string[] }>({ english: [] });
@@ -167,7 +183,7 @@ const Page = () => {
         const selectedVoice = selectedVoiceForNewSpeakerByLang[lang];
         const names = speakerNamesByLang[lang] || [];
         if (selectedVoice && !names.includes(selectedVoice) && names.length < SPEAKER_MAX_LIMIT) {
-            const voice = voiceOptions.find(v => v.voice_id === selectedVoice);
+            const voice = voiceOptions.find((v: VoiceOption) => v.voice_id === selectedVoice);
             setSpeakerNamesByLang(prev => ({
                 ...prev,
                 [lang]: [...names, voice?.name || selectedVoice]
@@ -207,7 +223,7 @@ const Page = () => {
 
     // Get available voices that haven't been selected yet for a language
     const getAvailableVoices = (lang: string) => {
-        return voiceOptions.filter(voice => !(speakerNamesByLang[lang] || []).includes(voice.name));
+        return voiceOptions.filter((voice: VoiceOption) => !(speakerNamesByLang[lang] || []).includes(voice.name));
     };
 
     // Audio generation functions
@@ -230,7 +246,7 @@ const Page = () => {
         for (const lang of audioLangs) {
             const names = speakerNamesByLang[lang] || [];
             const voices = names.map(name => {
-                const voice = voiceOptions.find(v => v.name === name);
+                const voice = voiceOptions.find((v: VoiceOption) => v.name === name);
                 return voice ? voice.voice_id : voiceOptions[0].voice_id;
             });
             speakers[lang] = voices;
@@ -516,7 +532,7 @@ const Page = () => {
                                                 </SelectTrigger>
                                                 <SelectContent>
                                                     {getAvailableVoices(selectedLang)
-                                                        .map(voice => (
+                                                        .map((voice: VoiceOption) => (
                                                             <SelectItem key={voice.voice_id} value={voice.voice_id}>
                                                                 {voice.name}
                                                             </SelectItem>

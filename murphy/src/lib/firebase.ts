@@ -14,7 +14,7 @@ export interface Podcast {
     french: string;
     german: string;
     hindi: string;
-    italy: string;
+    italian: string;
     tamil: string;
   };
   userId: string;
@@ -57,7 +57,7 @@ export async function addPodcast(
         french: urls.french || "",
         german: urls.german || "",
         hindi: urls.hindi || "",
-        italy: urls.italy || "",
+        italian: urls.italian || "",
         tamil: urls.tamil || "",
       },
       userId: userId || "",
@@ -73,5 +73,39 @@ export async function addPodcast(
     console.log("Podcast written with ID:", podcastId);
   } catch (e) {
     console.error("Error adding podcast:", e);
+  }
+}
+
+export async function getAllPodcasts(userId?: string): Promise<Podcast[]> {
+  try {
+    const { podcasts } = await connectDB();
+    const query = userId ? { userId } : {};
+    const allPodcasts = await podcasts.find(query).sort({ createdAt: -1 }).toArray();
+    return allPodcasts;
+  } catch (e) {
+    console.error("Error fetching podcasts:", e);
+    return [];
+  }
+}
+
+export async function getPodcastById(podcastId: string): Promise<Podcast | null> {
+  try {
+    const { podcasts } = await connectDB();
+    const podcast = await podcasts.findOne({ _id: podcastId });
+    return podcast;
+  } catch (e) {
+    console.error("Error fetching podcast:", e);
+    return null;
+  }
+}
+
+export async function getPodcastsByUserId(userId: string): Promise<Podcast[]> {
+  try {
+    const { podcasts } = await connectDB();
+    const userPodcasts = await podcasts.find({ userId }).sort({ createdAt: -1 }).toArray();
+    return userPodcasts;
+  } catch (e) {
+    console.error("Error fetching user podcasts:", e);
+    return [];
   }
 }
