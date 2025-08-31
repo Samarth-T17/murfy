@@ -2,14 +2,15 @@ import axios from "axios";
 import fs from "fs";
 import { spawn } from "child_process";
 import os from "os";
-import path from "path"; 
+import path from "path";
+import { langVoiceMap } from "@/lib/langVoiceType"
 
 export async function generatePodcastAudio(
     content: string,
     names: string[],
-    speakers: string[], 
+    speakers: langVoiceMap, 
     uniqueId: string
-): Promise<string> {
+): Promise<string[]> {
 
     const voiceMap = new Map<string, string>();
     names.forEach((name, index) => {
@@ -70,7 +71,6 @@ export async function generateAudio(conversations: { [speaker: string]: string }
                 responseType: "arraybuffer",
             });
 
-            // Use uniqueId in part filenames
             const filename = path.join(os.tmpdir(), `${uniqueId}_part${idx}.mp3`);
             fs.writeFileSync(filename, Buffer.from(audioResponse.data));
             console.log(`${speaker} -> saved ${filename}`);

@@ -8,18 +8,11 @@ import path from 'path';
 
 export async function POST(request: NextRequest) {
     try {
-        const { content, names, speakers, description, title } = await request.json();
+        const { content, names, langVoiceMap, description, title } = await request.json();
 
-        if (!content || !names || !speakers || !description || !title) {
+        if (!content || !names || !langVoiceMap || !description || !title) {
             return NextResponse.json(
-                { error: 'Missing required fields: content, names, speakers, description, title' },
-                { status: 400 }
-            );
-        }
-
-        if (names.length !== speakers.length) {
-            return NextResponse.json(
-                { error: 'Names and speakers arrays must have the same length' },
+                { error: 'Missing required fields: content, names, langVoiceMap, description, title' },
                 { status: 400 }
             );
         }
@@ -31,10 +24,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('Generating audio for content with speakers:', names, speakers);
+        console.log('Generating audio for content with speakers:', names, langVoiceMap);
         const podcastUniqueId = uuidv4();
 
-        const audioFilePath = await generatePodcastAudio(content, names, speakers, podcastUniqueId);
+        const audioFilePath = await generatePodcastAudio(content, names, langVoiceMap, podcastUniqueId);
 
         const englishURL = await uploadMp3(audioFilePath, path.basename(audioFilePath));
         const url = {

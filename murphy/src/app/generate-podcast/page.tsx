@@ -37,7 +37,7 @@ import {
 } from 'lucide-react'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
-import { title } from 'process';
+import { langVoiceMap } from '@/lib/langVoiceType';
 
 const themes = [
     {
@@ -217,6 +217,7 @@ const Page = () => {
 
     // Audio generation functions
     const generateAudio = async (content: PodcastContent) => {
+
         if (!content.content.trim()) {
             toast.error('No content available to generate audio');
             return;
@@ -235,7 +236,16 @@ const Page = () => {
 
         setIsGeneratingAudio(true);
         toast.info('Generating podcast audio... This may take a few minutes.');
-
+        const langVoiceMap: langVoiceMap = {
+            english: voices,
+            bengali: [],
+            french: [],
+            german: [],
+            hindi: [],
+            italian: [],
+            tamil: []
+        };
+        
         try {
             const response = await fetch('/api/generate-audio', {
                 method: 'POST',
@@ -245,7 +255,7 @@ const Page = () => {
                 body: JSON.stringify({
                     content: content.content,
                     names: speakerNames,
-                    speakers: voices,
+                    speakers: langVoiceMap,
                     description: content.description,
                     title: content.title
                 }),
