@@ -245,22 +245,22 @@ const Page = () => {
             toast.error('No content available to generate audio');
             return;
         }
+        const langsWithSpeakers = Object.keys(speakerNamesByLang).filter(
+            lang => (speakerNamesByLang[lang]?.length ?? 0) > 0
+        );
 
-        // Validate at least one speaker for each selected language
-        for (const lang of audioLangs) {
-            if (!speakerNamesByLang[lang] || speakerNamesByLang[lang].length === 0) {
-                toast.error(`No speakers available for ${lang} audio generation`);
-                return;
-            }
+        if (langsWithSpeakers.length === 0) {
+            toast.error('Please add at least one speaker in any language');
+            return;
         }
 
         // Map speaker names to their corresponding voice IDs for each language
         const langVoiceMap: langVoiceMap = {};
-        for (const lang of audioLangs) {
+        for (const lang of langsWithSpeakers) {
             const names = speakerNamesByLang[lang] || [];
             const voices = names.map(name => {
-                const voice = voiceOptions.find((v: VoiceOption) => v.name === name);
-                return voice ? voice.voice_id : voiceOptions[0].voice_id;
+                const voice = (langToVoiceOptions[lang] || []).find((v: VoiceOption) => v.name === name);
+                return voice ? voice.voice_id : (langToVoiceOptions[lang]?.[0]?.voice_id ?? "");
             });
             langVoiceMap[lang] = voices;
         }
@@ -591,26 +591,7 @@ const Page = () => {
                                 </div>
                             </div>
 
-                            {/* Audio Language Selection */}
-                            <div className="mb-4">
-                                <Label>Select languages for audio:</Label>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                    {supportedLanguages.map(lang => (
-                                        <Button
-                                            key={lang.code}
-                                            variant={audioLangs.includes(lang.code) ? "default" : "outline"}
-                                            size="sm"
-                                            onClick={() => setAudioLangs(langs =>
-                                                langs.includes(lang.code)
-                                                    ? langs.filter(l => l !== lang.code)
-                                                    : [...langs, lang.code]
-                                            )}
-                                        >
-                                            {lang.label}
-                                        </Button>
-                                    ))}
-                                </div>
-                            </div>
+
 
                             {selectedTheme && (
                                 <div className="p-4 bg-gradient-to-r from-muted/50 to-muted rounded-lg border-l-4 border-primary">
