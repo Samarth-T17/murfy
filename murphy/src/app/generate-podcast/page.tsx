@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -143,8 +143,8 @@ const Page = () => {
     const [audioLangs, setAudioLangs] = useState<string[]>(["english"]);
     const [audioFiles, setAudioFiles] = useState<{ [lang: string]: { url: string, fileName: string } }>({});
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-    const [isPlayingAudio, setIsPlayingAudio] = useState<{ [lang: string]: boolean }>({});
-    const [audioRefs, setAudioRefs] = useState<{ [lang: string]: HTMLAudioElement | null }>({});
+
+
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
         description: '',
@@ -172,6 +172,8 @@ const Page = () => {
         editedDescription: 0,
         editedContent: 0
     });
+    const audioRefs = useRef<{ [lang: string]: HTMLAudioElement | null }>({})
+    const [isPlayingAudio, setIsPlayingAudio] = useState<{ [lang: string]: boolean }>({})
 
     const SPEAKER_MAX_LIMIT = 5;
 
@@ -299,16 +301,22 @@ const Page = () => {
     };
 
     const playPauseAudio = (lang: string) => {
-        const ref = audioRefs[lang];
-        if (!ref) return;
+        const audio = audioRefs.current[lang]
+        if (!audio) return
+
         if (isPlayingAudio[lang]) {
-            ref.pause();
-            setIsPlayingAudio(prev => ({ ...prev, [lang]: false }));
+            audio.pause()
         } else {
-            ref.play();
-            setIsPlayingAudio(prev => ({ ...prev, [lang]: true }));
+            // pause other audios
+            Object.keys(audioRefs.current).forEach(otherLang => {
+            if (otherLang !== lang && audioRefs.current[otherLang]) {
+                audioRefs.current[otherLang]?.pause()
+            }
+            })
+            audio.play()
         }
-    };
+    }
+
 
     const downloadAudio = (lang: string) => {
         const file = audioFiles[lang];
@@ -791,17 +799,18 @@ const Page = () => {
                                                                         <Play className="h-4 w-4" />
                                                                     )}
                                                                 </Button>
-                                                                <div className="flex-1">
-                                                                    <audio
-                                                                        ref={el => setAudioRefs(prev => ({ ...prev, [lang]: el }))}
-                                                                        src={file.url}
-                                                                        onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
-                                                                        onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
-                                                                        onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
-                                                                        controls
-                                                                        className="w-full"
-                                                                    />
-                                                                </div>
+                                                                    <div className="flex-1">
+                                                                        <audio
+                                                                            ref={el => { audioRefs.current[lang] = el }}
+                                                                            src={file.url}
+                                                                            onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
+                                                                            onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                            onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                            controls
+                                                                            className="w-full"
+                                                                        />
+                                                                    </div>
+
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
@@ -995,53 +1004,45 @@ const Page = () => {
                                             </div>
 
                                             {/* Audio Player Section for Edited Content */}
-                                            {Object.keys(audioFiles).length > 0 && (
-                                                <div className="space-y-4">
-                                                    {Object.entries(audioFiles).map(([lang, file]) => (
-                                                        <div key={lang} className="p-4 bg-gradient-to-r from-orange-50 to-blue-50 rounded-lg border">
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <Headphones className="h-4 w-4" />
-                                                                <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
-                                                                <Badge variant="outline">{file.fileName}</Badge>
-                                                            </div>
-                                                            <div className="flex items-center gap-3">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => playPauseAudio(lang)}
-                                                                    className="shrink-0"
-                                                                >
-                                                                    {isPlayingAudio[lang] ? (
-                                                                        <Pause className="h-4 w-4" />
-                                                                    ) : (
-                                                                        <Play className="h-4 w-4" />
-                                                                    )}
-                                                                </Button>
-                                                                <div className="flex-1">
-                                                                    <audio
-                                                                        ref={el => setAudioRefs(prev => ({ ...prev, [lang]: el }))}
-                                                                        src={file.url}
-                                                                        onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
-                                                                        onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
-                                                                        onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
-                                                                        controls
-                                                                        className="w-full"
-                                                                    />
-                                                                </div>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => downloadAudio(lang)}
-                                                                    className="hover:bg-orange-100"
-                                                                >
-                                                                    <Download className="h-3 w-3 mr-1" />
-                                                                    Download
-                                                                </Button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
+                                            {Object.entries(audioFiles).map(([lang, file]) => (
+                                                <div key={lang} className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                    <Headphones className="h-4 w-4" />
+                                                    <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
+                                                    <Badge variant="outline">{file.fileName}</Badge>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-3">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => playPauseAudio(lang)}
+                                                        className="shrink-0"
+                                                    >
+                                                        {isPlayingAudio[lang] ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                                                    </Button>
+
+                                                    <audio
+                                                        ref={el => { audioRefs.current[lang] = el }}
+                                                        src={file.url}
+                                                        onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
+                                                        onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                        onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                        controls
+                                                        className="flex-1 w-full"
+                                                    />
+
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => downloadAudio(lang)}
+                                                        className="hover:bg-purple-100"
+                                                    >
+                                                        <Download className="h-3 w-3 mr-1" /> Download
+                                                    </Button>
+                                                    </div>
                                                 </div>
-                                            )}
+                                                ))}
 
                                             <div className="flex justify-between pt-4 border-t">
                                                 <div className="flex gap-2">
