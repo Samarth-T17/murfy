@@ -5,40 +5,110 @@ import os from "os";
 import path from "path";
 import { langVoiceMap } from "@/lib/langVoiceType"
 
+const langCodes: Record<string, string> = {
+    english: "en-US",
+    bengali: "bn-IN",
+    hindi: "hi-IN",
+    tamil: "ta-IN",
+    italian: "it-IT",
+    french: "fr-FR",
+    german: "de-DE"
+};
+
 export async function generatePodcastAudio(
     content: string,
     names: string[],
-    speakers: langVoiceMap, 
+    allSpeakers: langVoiceMap, 
     uniqueId: string
-): Promise<string[]> {
+): Promise<Record<string, string>> {
 
-    const voiceMap = new Map<string, string>();
-    names.forEach((name, index) => {
-        voiceMap.set(name, speakers[index]);
-    });
+    const paths: Record<string, string> = {};
+    for(const key in allSpeakers) {
+        const speakers = allSpeakers[key];
+        const voiceMap = new Map<string, string>();
+        names.forEach((name, index) => {
+            voiceMap.set(name, speakers[index]);
+        });
 
-    const parsedContent = parsePodcastContent(content, voiceMap);
-    const audioFilePath = await generateAudio(parsedContent, uniqueId);
-    
-    return audioFilePath;
+        const parsedContent = parsePodcastContent(content, voiceMap);
+        if(key != "english" && allSpeakers[key].length != 0) {
+            const translatedContent = await translatePodcastContent(parsedContent, key);
+            const audioFilePath = await generateAudio(translatedContent, uniqueId + key);
+            paths[key] = audioFilePath;
+        } else if(allSpeakers[key].length != 0) {
+            const audioFilePath = await generateAudio(parsedContent, uniqueId + key);
+            paths[key] = audioFilePath;
+        }   
+    }
+    return paths;
+
 }
 
-function parsePodcastContent(content : string, voiceMap: Map<string, string>) {
+async function translatePodcastContent(
+  content: { [key: string]: string }[], targetLanguage: string
+): Promise<{ [key: string]: string }[]> {
+    const srcContent: string[] = [];
+    const keys: string[] = [];
+
+    for (const obj of content) {
+        for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            keys.push(key);
+            srcContent.push(obj[key]);
+        }
+        }
+    }
+
+    const options = {
+        method: "POST",
+        url: "https://api.murf.ai/v1/text/translate",
+        headers: {
+        "api-key": process.env.MURF_API_KEY,
+        "Content-Type": "application/json",
+        },
+        data: {
+        targetLanguage: langCodes[targetLanguage], 
+        texts: srcContent,
+        },
+    };
+
+    try {
+        const response = await axios.request(options);
+        const translations = response.data.translations;
+
+        const targetPodcastContent: { [key: string]: string }[] = keys.map(
+        (key, index) => ({
+            [key]: translations[index].translated_text,
+        })
+        );
+        console.log("Translated podcast content:", targetPodcastContent);
+        return targetPodcastContent;
+    } catch (error) {
+        console.error("Translation API error:", error);
+        throw error;
+    }
+}
+
+function parsePodcastContent(
+  content: string,
+  voiceMap: Map<string, string>
+): { [key: string]: string }[] {
     content = content.replace(/ +/g, " ");
     const lines = content.split("\n").map(line => line.trim()).filter(line => line.length > 0);
-    
-    const result = [];
+
+    const result: { [key: string]: string }[] = [];
 
     for (const line of lines) {
         for (const name of voiceMap.keys()) {
-            if (line.startsWith(name + ":")) {
-                result.push({
-                    [voiceMap.get(name)!]: line.slice(name.length + 1).trim()
-                });
-                break; 
-            }
+        if (line.startsWith(name + ":")) {
+            result.push({
+            [voiceMap.get(name)!]: line.slice(name.length + 1).trim()
+            });
+            break;
+        }
         }
     }
+
     console.log("Parsed podcast content:", result);
     return result;
 }

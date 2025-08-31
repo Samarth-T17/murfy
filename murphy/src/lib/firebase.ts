@@ -1,43 +1,77 @@
-// lib/firebase.ts
+import { MongoClient, Db, Collection } from "mongodb";
 
-import { initializeApp, getApps, getApp } from "firebase/app";
-import { collection, addDoc, getFirestore } from "firebase/firestore"
+const uri = process.env.MONGODB_URI as string; 
+if (!uri) throw new Error("Missing MONGODB_URI env var");
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
+export interface Podcast {
+  _id: string;                  
+  description: string;
+  idea: string;
+  podcastTextContent: string;
+  urls: {
+    bengali: string;
+    english: string;
+    french: string;
+    german: string;
+    hindi: string;
+    italy: string;
+    tamil: string;
+  };
+  userId: string;
+  createdAt: Date;
+}
 
+let client: MongoClient | null = null;
+let db: Db;
+let podcasts: Collection<Podcast>;
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-export const db = getFirestore(app);
-export default app;
+export async function connectDB() {
+  if (!client) {
+    client = new MongoClient(uri);
+    await client.connect();
+    db = client.db("murf");
+    podcasts = db.collection<Podcast>("podcasts");
+  }
+  return { db, podcasts };
+}
 
-export async function addPodcast(description: string, idea: string, podcastId: string, podcastTextContent: string, userId: string, urls: Record<string, string>) {
+export async function addPodcast(
+  description: string,
+  idea: string,
+  podcastId: string,
+  podcastTextContent: string,
+  userId: string,
+  urls: Record<string, string> = {}
+) {
   try {
-    const docRef = await addDoc(collection(db, "podcasts/podcasts"), {
-      "description": description,
-      "idea": idea,
-      "podcastId": podcastId,
-      "podcastTextContent": podcastTextContent,
-      "urls": {
-        "bengali": urls.bengali || "",
-        "english": urls.english || "",
-        "french": urls.french || "",
-        "german": urls.german || "",
-        "hindhi": urls.hindhi || "",
-        "italy": urls.italy || "",
-        "tamil": urls.tamil || "",
-      },
-      "user-id": userId
-    });
+    const { podcasts } = await connectDB();
 
-    console.log("Document written with ID: ", docRef.id);
+    const doc: Podcast = {
+      _id: podcastId, 
+      description: description || "",
+      idea: idea || "",
+      podcastTextContent: podcastTextContent || "",
+      urls: {
+        bengali: urls.bengali || "",
+        english: urls.english || "",
+        french: urls.french || "",
+        german: urls.german || "",
+        hindi: urls.hindi || "",
+        italy: urls.italy || "",
+        tamil: urls.tamil || "",
+      },
+      userId: userId || "",
+      createdAt: new Date(),
+    };
+
+    await podcasts.updateOne(
+      { _id: podcastId },
+      { $set: doc },
+      { upsert: true }
+    );
+
+    console.log("Podcast written with ID:", podcastId);
   } catch (e) {
-    console.error("Error adding document: ", e);
+    console.error("Error adding podcast:", e);
   }
 }
