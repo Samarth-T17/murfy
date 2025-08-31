@@ -99,7 +99,15 @@ const themes = [
         color: 'bg-yellow-100 text-yellow-800 border-yellow-200'
     }
 ];
-
+const langToVoiceOptions: { [lang: string]: VoiceOption[] } = {
+    english: voicesData.englishVoiceOptions,
+    hindi: voicesData.hindiVoiceOptions,
+    bengali: voicesData.bengaliVoiceOptions,
+    french: voicesData.frenchVoiceOptions,
+    german: voicesData.germanVoiceOptions,
+    italian: voicesData.italianVoiceOptions,
+    tamil: voicesData.tamilVoiceOptions,
+};
 const supportedLanguages = [
     { code: "english", label: "English" },
     { code: "hindi", label: "Hindi" },
@@ -120,6 +128,7 @@ const voiceOptions = [
     ...voicesData.italianVoiceOptions,
     ...voicesData.tamilVoiceOptions
 ];
+
 
 type VoiceOption = {
     name: string;
@@ -224,7 +233,8 @@ const Page = () => {
 
     // Get available voices that haven't been selected yet for a language
     const getAvailableVoices = (lang: string) => {
-        return voiceOptions.filter((voice: VoiceOption) => !(speakerNamesByLang[lang] || []).includes(voice.name));
+        const options = langToVoiceOptions[lang] || [];
+        return options.filter((voice: VoiceOption) => !(speakerNamesByLang[lang] || []).includes(voice.name));
     };
 
     // Audio generation functions
@@ -243,18 +253,19 @@ const Page = () => {
         }
 
         // Map speaker names to their corresponding voice IDs for each language
-        const speakers: langVoiceMap = {};
+        const langVoiceMap: langVoiceMap = {};
         for (const lang of audioLangs) {
             const names = speakerNamesByLang[lang] || [];
             const voices = names.map(name => {
                 const voice = voiceOptions.find((v: VoiceOption) => v.name === name);
                 return voice ? voice.voice_id : voiceOptions[0].voice_id;
             });
-            speakers[lang] = voices;
+            langVoiceMap[lang] = voices;
         }
 
         setIsGeneratingAudio(true);
         toast.info('Generating podcast audio in selected languages...');
+        console.log("langVoiceMap ", langVoiceMap);
         try {
             const response = await fetch('/api/generate-audio', {
                 method: 'POST',
@@ -262,7 +273,7 @@ const Page = () => {
                 body: JSON.stringify({
                     content: content.content,
                     names: speakerNamesByLang["english"], // or main lang
-                    speakers,
+                    langVoiceMap,
                     description: content.description,
                     title: content.title
                 }),
@@ -404,7 +415,7 @@ const Page = () => {
                 duration: 4000,
             }
         );
-
+        console.log("Map : ", speakerNamesByLang);
         // Generate audio automatically after finalizing
         if (speakerNamesByLang["english"] && speakerNamesByLang["english"].length > 0) {
             await generateAudio(content);
@@ -567,7 +578,7 @@ const Page = () => {
                                     </div>
                                     <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
                                         <Info className="h-3 w-3 inline mr-1" />
-                                        Select from {voiceOptions.length} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed per language.
+                                        Select from {(langToVoiceOptions[selectedLang]?.length ?? 0)} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed per language.
                                     </div>
                                 </div>
                             </div>

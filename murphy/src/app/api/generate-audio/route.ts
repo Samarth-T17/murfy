@@ -32,13 +32,7 @@ export async function POST(request: NextRequest) {
 // {"voice_id":"bn-IN-ishani","style":"Conversational"}
 // {"voice_id":"bn-IN-abhik","style":"Conversational"}
         const { content, names, langVoiceMap, description, title } = await request.json();
-        if (!content || !names || !langVoiceMap || !description || !title) {
-            return NextResponse.json(
-                { error: 'Missing required fields: content, names, langVoiceMap, description, title' },
-                { status: 400 }
-            );
-        }
-
+        console.log("y oy ", langVoiceMap);
         if (!process.env.MURF_API_KEY) {
             return NextResponse.json(
                 { error: 'Murf API key not configured' },

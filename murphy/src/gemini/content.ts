@@ -93,7 +93,8 @@ Requirements:
 1. Include an engaging title that captures the essence of the idea.
 2. Write a compelling description (2-3 sentences) that would attract listeners.
 3. The full podcast script/content should be substantial (at least 500-800 words), written entirely as dialogue between the provided characters (maximum of 3).
-4. Do not return the character names in a separate array — just use them directly in the dialogue.
+4. Only write dialogues do not write things like (laughing etc).
+5. Do not return the character names in a separate array — just use them directly in the dialogue.
 
 Respond in this exact JSON format:
 {
