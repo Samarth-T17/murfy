@@ -8,31 +8,30 @@ import path from 'path';
 
 export async function POST(request: NextRequest) {
     try {
-        const content = `
-Ken: Welcome everyone to TechForward, the podcast dedicated to exploring the latest advancements in technology! Today, we're diving deep into the exciting world of AI-powered text-to-speech with Murf's API.  Natalie and Marcus, welcome to the show!
+//         const content = `
+// Ken: Welcome everyone to TechForward, the podcast dedicated to exploring the latest advancements in technology! Today, we're diving deep into the exciting world of AI-powered text-to-speech with Murf's API.  Natalie and Marcus, welcome to the show!
 
-Natalie: Thanks for having me, Ken!  I'm thrilled to discuss Murf.  It's a game-changer for anyone needing high-quality, natural-sounding speech synthesis.
+// Natalie: Thanks for having me, Ken!  I'm thrilled to discuss Murf.  It's a game-changer for anyone needing high-quality, natural-sounding speech synthesis.
 
-Marcus: Absolutely.  As a developer, the accuracy and versatility Murf offers are incredibly appealing.  It's a breath of fresh air compared to some of the clunky TTS APIs I've worked with in the past.
-`;
-        const names = ["Marcus", "Natalie", "Ken"];
-        const langVoiceMap = {
-            english: ["en-US-natalie", "en-US-ken", "en-US-charles"],
-            german: ["de-DE-lara", "de-DE-matthias", "de-DE-björn"],
-            french: [],
-            italian: [],
-            hindi: [],
-            tamil: ["ta-IN-iniya", "ta-IN-abirami", "ta-IN-sarvesh"],
-            bengali: ["bn-IN-anwesha", "bn-IN-ishani", "bn-IN-abhik"]
-        };
+// Marcus: Absolutely.  As a developer, the accuracy and versatility Murf offers are incredibly appealing.  It's a breath of fresh air compared to some of the clunky TTS APIs I've worked with in the past.
+// `;
+//         const names = ["Marcus", "Natalie", "Ken"];
+//         const langVoiceMap = {
+//             english: ["en-US-natalie", "en-US-ken", "en-US-charles"],
+//             german: ["de-DE-lara", "de-DE-matthias", "de-DE-björn"],
+//             french: [],
+//             italian: [],
+//             hindi: [],
+//             tamil: ["ta-IN-iniya", "ta-IN-abirami", "ta-IN-sarvesh"],
+//             bengali: ["bn-IN-anwesha", "bn-IN-ishani", "bn-IN-abhik"]
+//         };
 // {"voice_id":"ta-IN-abirami","style":"General"}
 // {"voice_id":"ta-IN-sarvesh","style":"General"}
 // {"voice_id":"ta-IN-suresh","style":"Conversational"}
 // {"voice_id":"bn-IN-anwesha","style":"General"}
 // {"voice_id":"bn-IN-ishani","style":"Conversational"}
 // {"voice_id":"bn-IN-abhik","style":"Conversational"}
-        //const { content, names, langVoiceMap, description, title } = await request.json();
-        const { description, title } = { description: " kehfworj", title: "rlgjerilg" };
+        const { content, names, langVoiceMap, description, title } = await request.json();
         if (!content || !names || !langVoiceMap || !description || !title) {
             return NextResponse.json(
                 { error: 'Missing required fields: content, names, langVoiceMap, description, title' },

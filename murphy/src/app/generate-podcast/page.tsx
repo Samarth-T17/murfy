@@ -38,6 +38,7 @@ import {
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
 import { langVoiceMap } from '@/lib/langVoiceType';
+import { englishVoiceOptions, hindiVoiceOptions, bengaliVoiceOptions, frenchVoiceOptions, germanVoiceOptions, italianVoiceOptions, tamilVoiceOptions } from "@/lib/voices";
 
 const themes = [
     {
@@ -98,38 +99,26 @@ const themes = [
     }
 ];
 
-const voiceOptions = [
-    {
-        name: "Natalie",
-        voice_id: "en-US-natalie",
-        style: "Conversational"
-    },
-    {
-        name: "Ken",
-        voice_id: "en-US-ken",
-        style: "Conversational"
-    },
-    {
-        name: "Sarah",
-        voice_id: "en-US-sarah",
-        style: "Conversational"
-    },
-    {
-        name: "Marcus",
-        voice_id: "en-US-marcus",
-        style: "Conversational"
-    },
-    {
-        name: "Emma",
-        voice_id: "en-US-emma",
-        style: "Conversational"
-    }
-]
+const supportedLanguages = [
+    { code: "english", label: "English" },
+    { code: "hindi", label: "Hindi" },
+    { code: "bengali", label: "Bengali" },
+    { code: "french", label: "French" },
+    { code: "german", label: "German" },
+    { code: "italian", label: "Italian" },
+    { code: "tamil", label: "Tamil" }
+];
 
 const Page = () => {
     const [podcastIdea, setPodcastIdea] = useState<string>('');
-    const [speakerNames, setSpeakerNames] = useState<string[]>([]);
-    const [selectedVoiceForNewSpeaker, setSelectedVoiceForNewSpeaker] = useState<string>('');
+    const [speakerNamesByLang, setSpeakerNamesByLang] = useState<{ [lang: string]: string[] }>({ english: [] });
+    const [selectedLang, setSelectedLang] = useState<string>("english");
+    const [selectedVoiceForNewSpeakerByLang, setSelectedVoiceForNewSpeakerByLang] = useState<{ [lang: string]: string }>({});
+    const [audioLangs, setAudioLangs] = useState<string[]>(["english"]);
+    const [audioFiles, setAudioFiles] = useState<{ [lang: string]: { url: string, fileName: string } }>({});
+    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+    const [isPlayingAudio, setIsPlayingAudio] = useState<{ [lang: string]: boolean }>({});
+    const [audioRefs, setAudioRefs] = useState<{ [lang: string]: HTMLAudioElement | null }>({});
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
         description: '',
@@ -149,10 +138,6 @@ const Page = () => {
     const [hasGenerated, setHasGenerated] = useState(false);
     const [activeTab, setActiveTab] = useState('generated');
     const [editingContent, setEditingContent] = useState(false);
-    const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-    const [generatedAudioUrl, setGeneratedAudioUrl] = useState<string>('');
-    const [isPlayingAudio, setIsPlayingAudio] = useState(false);
-    const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
     const [wordCounts, setWordCounts] = useState({
         generatedTitle: 0,
         generatedDescription: 0,
@@ -177,151 +162,146 @@ const Page = () => {
         setWordCounts(counts);
     }, [generatedContent, editedContent]);
 
-    // Helper functions for managing speaker voices
-    const addSpeakerVoice = () => {
-        if (selectedVoiceForNewSpeaker && !speakerNames.includes(selectedVoiceForNewSpeaker) && speakerNames.length < SPEAKER_MAX_LIMIT) {
-            const selectedVoice = voiceOptions.find(voice => voice.voice_id === selectedVoiceForNewSpeaker);
-            setSpeakerNames([...speakerNames, selectedVoice?.name || selectedVoiceForNewSpeaker]);
-            setSelectedVoiceForNewSpeaker('');
-            toast.success(`Added ${selectedVoice?.name} as a speaker`, {
-                description: `You now have ${speakerNames.length + 1} speaker${speakerNames.length + 1 > 1 ? 's' : ''}`,
-            });
-        } else if (speakerNames.includes(selectedVoiceForNewSpeaker)) {
+    // Helper for adding speaker per language
+    const addSpeakerVoice = (lang: string) => {
+        const selectedVoice = selectedVoiceForNewSpeakerByLang[lang];
+        const names = speakerNamesByLang[lang] || [];
+        if (selectedVoice && !names.includes(selectedVoice) && names.length < SPEAKER_MAX_LIMIT) {
+            const voice = voiceOptions.find(v => v.voice_id === selectedVoice);
+            setSpeakerNamesByLang(prev => ({
+                ...prev,
+                [lang]: [...names, voice?.name || selectedVoice]
+            }));
+            setSelectedVoiceForNewSpeakerByLang(prev => ({ ...prev, [lang]: '' }));
+            toast.success(`Added ${voice?.name} as a speaker for ${lang}`);
+        } else if (names.includes(selectedVoice)) {
             toast.error('This voice is already selected');
-        } else if (speakerNames.length >= SPEAKER_MAX_LIMIT) {
+        } else if (names.length >= SPEAKER_MAX_LIMIT) {
             toast.error(`Maximum ${SPEAKER_MAX_LIMIT} speakers allowed`);
         } else {
             toast.error('Please select a voice');
         }
     };
 
-    const removeSpeakerName = (nameToRemove: string) => {
-        if (speakerNames.length <= 1) {
+    const removeSpeakerName = (lang: string, nameToRemove: string) => {
+        const names = speakerNamesByLang[lang] || [];
+        if (names.length <= 1) {
             toast.error('At least one speaker is required');
             return;
         }
-        setSpeakerNames(speakerNames.filter(name => name !== nameToRemove));
-        toast.success(`Removed ${nameToRemove} from speakers`);
+        setSpeakerNamesByLang(prev => ({
+            ...prev,
+            [lang]: names.filter(name => name !== nameToRemove)
+        }));
+        toast.success(`Removed ${nameToRemove} from ${lang} speakers`);
     };
 
-    const resetSpeakerNames = () => {
-        setSpeakerNames([]);
-        setSelectedVoiceForNewSpeaker('');
-        toast.info('Reset speakers');
+    const resetSpeakerNames = (lang: string) => {
+        setSpeakerNamesByLang(prev => ({
+            ...prev,
+            [lang]: []
+        }));
+        setSelectedVoiceForNewSpeakerByLang(prev => ({ ...prev, [lang]: '' }));
+        toast.info(`Reset speakers for ${lang}`);
     };
 
-    // Get available voices that haven't been selected yet
-    const getAvailableVoices = () => {
-        return voiceOptions.filter(voice => !speakerNames.includes(voice.name));
+    // Get available voices that haven't been selected yet for a language
+    const getAvailableVoices = (lang: string) => {
+        return voiceOptions.filter(voice => !(speakerNamesByLang[lang] || []).includes(voice.name));
     };
 
     // Audio generation functions
     const generateAudio = async (content: PodcastContent) => {
-
         if (!content.content.trim()) {
             toast.error('No content available to generate audio');
             return;
         }
 
-        if (speakerNames.length === 0) {
-            toast.error('No speakers available for audio generation');
-            return;
+        // Validate at least one speaker for each selected language
+        for (const lang of audioLangs) {
+            if (!speakerNamesByLang[lang] || speakerNamesByLang[lang].length === 0) {
+                toast.error(`No speakers available for ${lang} audio generation`);
+                return;
+            }
         }
 
-        // Map speaker names to their corresponding voice IDs
-        const voices = speakerNames.map(speakerName => {
-            const voice = voiceOptions.find(v => v.name === speakerName);
-            return voice ? voice.voice_id : voiceOptions[0].voice_id; // fallback to first voice
-        });
+        // Map speaker names to their corresponding voice IDs for each language
+        const speakers: langVoiceMap = {};
+        for (const lang of audioLangs) {
+            const names = speakerNamesByLang[lang] || [];
+            const voices = names.map(name => {
+                const voice = voiceOptions.find(v => v.name === name);
+                return voice ? voice.voice_id : voiceOptions[0].voice_id;
+            });
+            speakers[lang] = voices;
+        }
 
         setIsGeneratingAudio(true);
-        toast.info('Generating podcast audio... This may take a few minutes.');
-        const langVoiceMap: langVoiceMap = {
-            english: voices,
-            bengali: [],
-            french: [],
-            german: [],
-            hindi: [],
-            italian: [],
-            tamil: []
-        };
-        
+        toast.info('Generating podcast audio in selected languages...');
         try {
             const response = await fetch('/api/generate-audio', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     content: content.content,
-                    names: speakerNames,
-                    speakers: langVoiceMap,
+                    names: speakerNamesByLang["english"], // or main lang
+                    speakers,
                     description: content.description,
                     title: content.title
                 }),
             });
-
             const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Failed to generate audio');
 
-            if (!response.ok) {
-                throw new Error(data.error || 'Failed to generate audio');
+            // Handle multiple audio files
+            const files: { [lang: string]: { url: string, fileName: string } } = {};
+            for (const lang in data.files) {
+                const file = data.files[lang];
+                const audioBlob = new Blob([Uint8Array.from(atob(file.audio), c => c.charCodeAt(0))], { type: file.mimeType });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                files[lang] = { url: audioUrl, fileName: file.fileName };
             }
-
-            // Convert base64 to blob and create URL
-            const audioBlob = new Blob([Uint8Array.from(atob(data.audio), c => c.charCodeAt(0))], {
-                type: data.mimeType
-            });
-            const audioUrl = URL.createObjectURL(audioBlob);
-
-            setGeneratedAudioUrl(audioUrl);
-            toast.success('🎵 Audio generated successfully!', {
-                description: 'Your podcast is ready to listen to',
-                duration: 4000,
-            });
-
+            setAudioFiles(files);
+            toast.success('Audio generated for: ' + Object.keys(files).map(l => supportedLanguages.find(sl => sl.code === l)?.label || l).join(', '));
         } catch (error) {
-            console.error('Audio generation error:', error);
-            toast.error('Failed to generate audio', {
-                description: error instanceof Error ? error.message : 'Unknown error occurred',
-            });
+            toast.error('Failed to generate audio');
         } finally {
             setIsGeneratingAudio(false);
         }
     };
 
-    const playPauseAudio = () => {
-        if (!audioRef) return;
-
-        if (isPlayingAudio) {
-            audioRef.pause();
-            setIsPlayingAudio(false);
+    const playPauseAudio = (lang: string) => {
+        const ref = audioRefs[lang];
+        if (!ref) return;
+        if (isPlayingAudio[lang]) {
+            ref.pause();
+            setIsPlayingAudio(prev => ({ ...prev, [lang]: false }));
         } else {
-            audioRef.play();
-            setIsPlayingAudio(true);
+            ref.play();
+            setIsPlayingAudio(prev => ({ ...prev, [lang]: true }));
         }
     };
 
-    const downloadAudio = () => {
-        if (!generatedAudioUrl) return;
-
+    const downloadAudio = (lang: string) => {
+        const file = audioFiles[lang];
+        if (!file) return;
         const link = document.createElement('a');
-        link.href = generatedAudioUrl;
-        link.download = `podcast-${Date.now()}.mp3`;
+        link.href = file.url;
+        link.download = file.fileName;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
         toast.success('Audio download started!');
     };
 
-    // Clean up audio URL when component unmounts
+    // Clean up audio URLs when component unmounts
     React.useEffect(() => {
         return () => {
-            if (generatedAudioUrl) {
-                URL.revokeObjectURL(generatedAudioUrl);
-            }
+            Object.values(audioFiles).forEach(file => {
+                if (file.url) URL.revokeObjectURL(file.url);
+            });
         };
-    }, [generatedAudioUrl]);
+    }, [audioFiles]);
 
     const handleEditedContentChange = (field: keyof PodcastContent, value: string) => {
         setEditedContent(prev => ({
@@ -341,8 +321,8 @@ const Page = () => {
             return;
         }
 
-        if (speakerNames.length === 0) {
-            toast.error('Please add at least one speaker');
+        if (!speakerNamesByLang["english"] || speakerNamesByLang["english"].length === 0) {
+            toast.error('Please add at least one speaker for English');
             return;
         }
 
@@ -351,8 +331,7 @@ const Page = () => {
 
         try {
             // Use the Gemini service to generate content from idea with dynamic speaker names
-            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme, speakerNames);
-
+            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme, speakerNamesByLang["english"]);
             setGeneratedContent(generatedPodcast);
             setEditedContent(generatedPodcast); // Initialize edited content with generated content
             setHasGenerated(true);
@@ -410,7 +389,7 @@ const Page = () => {
         );
 
         // Generate audio automatically after finalizing
-        if (speakerNames.length > 0) {
+        if (speakerNamesByLang["english"] && speakerNamesByLang["english"].length > 0) {
             await generateAudio(content);
         }
 
@@ -496,115 +475,100 @@ const Page = () => {
                                 </Select>
                             </div>
 
-                            {/* Speaker Names Section */}
+                            {/* Speaker Names Section (per language) */}
                             <div>
-                                <div className="flex items-center justify-between mb-3">
-                                    <Label htmlFor="speaker-names">Podcast Speakers</Label>
-                                    <Badge variant="outline" className="text-xs">
-                                        {speakerNames.length}/{SPEAKER_MAX_LIMIT} speakers
-                                    </Badge>
-                                </div>
-
-                                {/* Current Speakers */}
-                                <div className="space-y-2 mb-3">
-                                    {speakerNames.map((name, index) => {
-                                        const voice = voiceOptions.find(v => v.name === name);
-                                        return (
-                                            <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="p-1.5 rounded-full bg-primary/10">
-                                                        <Users className="h-3 w-3 text-primary" />
-                                                    </div>
-                                                    <span className="font-medium text-sm">{name}</span>
-                                                    <Badge variant="secondary" className="text-xs">
-                                                        Speaker {index + 1}
-                                                    </Badge>
-                                                    {voice && (
-                                                        <Badge variant="outline" className="text-xs">
-                                                            {voice.style}
-                                                        </Badge>
-                                                    )}
-                                                </div>
-                                                {speakerNames.length > 1 && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        onClick={() => removeSpeakerName(name)}
-                                                        className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
-                                                    >
-                                                        <X className="h-3 w-3" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {/* Add New Speaker */}
-                                {speakerNames.length < SPEAKER_MAX_LIMIT && getAvailableVoices().length > 0 && (
-                                    <div className="flex gap-2">
-                                        <Select value={selectedVoiceForNewSpeaker} onValueChange={setSelectedVoiceForNewSpeaker}>
-                                            <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder="Select a voice..." />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {getAvailableVoices().map((voice) => (
-                                                    <SelectItem key={voice.voice_id} value={voice.voice_id}>
-                                                        <div className="flex items-center gap-2">
-                                                            <Users className="h-3 w-3" />
-                                                            <span className="font-medium">{voice.name}</span>
-                                                            <Badge variant="outline" className="text-xs">
-                                                                {voice.style}
-                                                            </Badge>
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button
-                                                        onClick={addSpeakerVoice}
-                                                        disabled={!selectedVoiceForNewSpeaker}
-                                                        size="sm"
-                                                        className="shrink-0"
-                                                    >
-                                                        <Plus className="h-4 w-4" />
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>Add speaker (max {SPEAKER_MAX_LIMIT})</p>
-                                                </TooltipContent>
-                                            </Tooltip>
-                                        </TooltipProvider>
+                                <Label className="mb-3">Podcast Speakers (per language)</Label>
+                                <Tabs value={selectedLang} onValueChange={setSelectedLang} className="mb-2">
+                                    <TabsList>
+                                        {supportedLanguages.map(lang => (
+                                            <TabsTrigger key={lang.code} value={lang.code}>
+                                                {lang.label}
+                                            </TabsTrigger>
+                                        ))}
+                                    </TabsList>
+                                </Tabs>
+                                <div>
+                                    {/* Current Speakers for selectedLang */}
+                                    {(speakerNamesByLang[selectedLang] || []).map((name, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg border mb-1">
+                                            <span>{name}</span>
+                                            {(speakerNamesByLang[selectedLang]?.length ?? 0) > 1 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeSpeakerName(selectedLang, name)}
+                                                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {/* Add New Speaker */}
+                                    {(speakerNamesByLang[selectedLang]?.length ?? 0) < SPEAKER_MAX_LIMIT && (
+                                        <div className="flex gap-2 mt-2">
+                                            <Select
+                                                value={selectedVoiceForNewSpeakerByLang[selectedLang] || ''}
+                                                onValueChange={val => setSelectedVoiceForNewSpeakerByLang(prev => ({ ...prev, [selectedLang]: val }))}
+                                            >
+                                                <SelectTrigger className="flex-1">
+                                                    <SelectValue placeholder="Select a voice..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {getAvailableVoices(selectedLang)
+                                                        .map(voice => (
+                                                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
+                                                                {voice.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button
+                                                onClick={() => addSpeakerVoice(selectedLang)}
+                                                disabled={!selectedVoiceForNewSpeakerByLang[selectedLang]}
+                                                size="sm"
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                            </Button>
+                                        </div>
+                                    )}
+                                    {/* Reset speakers for this language */}
+                                    <div className="flex gap-2 mt-3">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => resetSpeakerNames(selectedLang)}
+                                            className="text-xs"
+                                        >
+                                            <UserPlus className="h-3 w-3 mr-1" />
+                                            Reset Speakers
+                                        </Button>
                                     </div>
-                                )}
-
-                                {/* Show message when all voices are used */}
-                                {speakerNames.length < SPEAKER_MAX_LIMIT && getAvailableVoices().length === 0 && (
-                                    <div className="text-xs text-muted-foreground p-2 bg-amber-50 rounded border-l-2 border-amber-200">
+                                    <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
                                         <Info className="h-3 w-3 inline mr-1" />
-                                        All available voices have been selected. Remove a speaker to add a different voice.
+                                        Select from {voiceOptions.length} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed per language.
                                     </div>
-                                )}
-
-                                {/* Quick Actions */}
-                                <div className="flex gap-2 mt-3">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={resetSpeakerNames}
-                                        className="text-xs"
-                                    >
-                                        <UserPlus className="h-3 w-3 mr-1" />
-                                        Reset Speakers
-                                    </Button>
                                 </div>
+                            </div>
 
-                                <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
-                                    <Info className="h-3 w-3 inline mr-1" />
-                                    Select from {voiceOptions.length} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed.
+                            {/* Audio Language Selection */}
+                            <div className="mb-4">
+                                <Label>Select languages for audio:</Label>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {supportedLanguages.map(lang => (
+                                        <Button
+                                            key={lang.code}
+                                            variant={audioLangs.includes(lang.code) ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => setAudioLangs(langs =>
+                                                langs.includes(lang.code)
+                                                    ? langs.filter(l => l !== lang.code)
+                                                    : [...langs, lang.code]
+                                            )}
+                                        >
+                                            {lang.label}
+                                        </Button>
+                                    ))}
                                 </div>
                             </div>
 
@@ -629,7 +593,7 @@ const Page = () => {
                                     <TooltipTrigger asChild>
                                         <Button
                                             onClick={generatePodcastContent}
-                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim() || speakerNames.length === 0}
+                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim() || !speakerNamesByLang["english"] || speakerNamesByLang["english"].length === 0}
                                             className="w-full relative overflow-hidden group"
                                         >
                                             {isGenerating ? (
@@ -710,13 +674,13 @@ const Page = () => {
                                                     <div className="flex items-center gap-1">
                                                         <Users className="h-3 w-3 text-muted-foreground" />
                                                         <span className="text-xs text-muted-foreground">
-                                                            {speakerNames.length} speaker{speakerNames.length > 1 ? 's' : ''}
+                                                            {(speakerNamesByLang["english"] || []).length} speaker{(speakerNamesByLang["english"] || []).length > 1 ? 's' : ''}
                                                         </span>
                                                     </div>
                                                 </div>
-                                                {speakerNames.length > 0 && (
+                                                {(speakerNamesByLang["english"] || []).length > 0 && (
                                                     <div className="flex flex-wrap gap-1 mt-2">
-                                                        {speakerNames.map((name, index) => (
+                                                        {(speakerNamesByLang["english"] || []).map((name, index) => (
                                                             <Badge key={index} variant="secondary" className="text-xs">
                                                                 {name}
                                                             </Badge>
@@ -773,51 +737,23 @@ const Page = () => {
                                             </div>
 
                                             {/* Audio Player Section */}
-                                            {(generatedAudioUrl || isGeneratingAudio) && (
-                                                <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <Headphones className="h-4 w-4 text-purple-600" />
-                                                            <span className="font-medium text-purple-800">Generated Audio</span>
-                                                            <Badge variant="outline" className="bg-purple-100 text-purple-800 border-purple-200">
-                                                                MP3
-                                                            </Badge>
-                                                        </div>
-                                                        {!isGeneratingAudio && generatedAudioUrl && (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                onClick={downloadAudio}
-                                                                className="hover:bg-purple-100"
-                                                            >
-                                                                <Download className="h-3 w-3 mr-1" />
-                                                                Download
-                                                            </Button>
-                                                        )}
-                                                    </div>
-
-                                                    {isGeneratingAudio ? (
-                                                        <div className="space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600" />
-                                                                <span className="text-sm text-purple-700">Generating audio...</span>
+                                            {Object.keys(audioFiles).length > 0 && (
+                                                <div className="space-y-4">
+                                                    {Object.entries(audioFiles).map(([lang, file]) => (
+                                                        <div key={lang} className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <Headphones className="h-4 w-4" />
+                                                                <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
+                                                                <Badge variant="outline">{file.fileName}</Badge>
                                                             </div>
-                                                            <div className="space-y-1">
-                                                                <Skeleton className="h-2 w-full" />
-                                                                <Skeleton className="h-2 w-3/4" />
-                                                            </div>
-                                                            <p className="text-xs text-purple-600">This may take a few minutes depending on content length</p>
-                                                        </div>
-                                                    ) : generatedAudioUrl ? (
-                                                        <div className="space-y-3">
                                                             <div className="flex items-center gap-3">
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
-                                                                    onClick={playPauseAudio}
+                                                                    onClick={() => playPauseAudio(lang)}
                                                                     className="shrink-0"
                                                                 >
-                                                                    {isPlayingAudio ? (
+                                                                    {isPlayingAudio[lang] ? (
                                                                         <Pause className="h-4 w-4" />
                                                                     ) : (
                                                                         <Play className="h-4 w-4" />
@@ -825,25 +761,27 @@ const Page = () => {
                                                                 </Button>
                                                                 <div className="flex-1">
                                                                     <audio
-                                                                        ref={setAudioRef}
-                                                                        src={generatedAudioUrl}
-                                                                        onPlay={() => setIsPlayingAudio(true)}
-                                                                        onPause={() => setIsPlayingAudio(false)}
-                                                                        onEnded={() => setIsPlayingAudio(false)}
+                                                                        ref={el => setAudioRefs(prev => ({ ...prev, [lang]: el }))}
+                                                                        src={file.url}
+                                                                        onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
+                                                                        onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                        onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
                                                                         controls
                                                                         className="w-full"
                                                                     />
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {speakerNames.map((name, index) => (
-                                                                    <Badge key={index} variant="secondary" className="text-xs">
-                                                                        {name}: {voiceOptions[index % voiceOptions.length].name}
-                                                                    </Badge>
-                                                                ))}
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => downloadAudio(lang)}
+                                                                    className="hover:bg-purple-100"
+                                                                >
+                                                                    <Download className="h-3 w-3 mr-1" />
+                                                                    Download
+                                                                </Button>
                                                             </div>
                                                         </div>
-                                                    ) : null}
+                                                    ))}
                                                 </div>
                                             )}
 
@@ -920,7 +858,7 @@ const Page = () => {
                                                 <h3 className="text-lg font-medium mb-2">No content generated yet</h3>
                                                 <p className="text-sm mb-4">Enter your podcast idea, add speakers, and select a theme to generate complete podcast content.</p>
 
-                                                {(!podcastIdea.trim() || !selectedTheme || speakerNames.length === 0) && (
+                                                {(!podcastIdea.trim() || !selectedTheme || !speakerNamesByLang["english"] || speakerNamesByLang["english"].length === 0) && (
                                                     <Alert className="mt-4">
                                                         <Info className="h-4 w-4" />
                                                         <AlertDescription>
@@ -950,7 +888,7 @@ const Page = () => {
                                                     <div className="flex items-center gap-1 ml-2">
                                                         <Users className="h-3 w-3 text-muted-foreground" />
                                                         <span className="text-xs text-muted-foreground">
-                                                            {speakerNames.length} speaker{speakerNames.length > 1 ? 's' : ''}
+                                                            {(speakerNamesByLang["english"] || []).length} speaker{(speakerNamesByLang["english"] || []).length > 1 ? 's' : ''}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -964,9 +902,9 @@ const Page = () => {
                                                 </Button>
                                             </div>
 
-                                            {speakerNames.length > 0 && (
+                                            {(speakerNamesByLang["english"] || []).length > 0 && (
                                                 <div className="flex flex-wrap gap-1 mb-3">
-                                                    {speakerNames.map((name, index) => (
+                                                    {(speakerNamesByLang["english"] || []).map((name, index) => (
                                                         <Badge key={index} variant="secondary" className="text-xs">
                                                             {name}
                                                         </Badge>
@@ -1025,63 +963,23 @@ const Page = () => {
                                             </div>
 
                                             {/* Audio Player Section for Edited Content */}
-                                            {(generatedAudioUrl || isGeneratingAudio) && (
-                                                <div className="p-4 bg-gradient-to-r from-orange-50 to-blue-50 rounded-lg border border-orange-200">
-                                                    <div className="flex items-center justify-between mb-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <Headphones className="h-4 w-4 text-orange-600" />
-                                                            <span className="font-medium text-orange-800">Generated Audio</span>
-                                                            <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-200">
-                                                                MP3
-                                                            </Badge>
-                                                        </div>
-                                                        {!isGeneratingAudio && generatedAudioUrl && (
-                                                            <div className="flex gap-2">
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={() => generateAudio(editedContent)}
-                                                                    disabled={isGeneratingAudio}
-                                                                    className="hover:bg-orange-100"
-                                                                >
-                                                                    <Volume2 className="h-3 w-3 mr-1" />
-                                                                    Regenerate
-                                                                </Button>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    onClick={downloadAudio}
-                                                                    className="hover:bg-orange-100"
-                                                                >
-                                                                    <Download className="h-3 w-3 mr-1" />
-                                                                    Download
-                                                                </Button>
+                                            {Object.keys(audioFiles).length > 0 && (
+                                                <div className="space-y-4">
+                                                    {Object.entries(audioFiles).map(([lang, file]) => (
+                                                        <div key={lang} className="p-4 bg-gradient-to-r from-orange-50 to-blue-50 rounded-lg border">
+                                                            <div className="flex items-center gap-2 mb-2">
+                                                                <Headphones className="h-4 w-4" />
+                                                                <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
+                                                                <Badge variant="outline">{file.fileName}</Badge>
                                                             </div>
-                                                        )}
-                                                    </div>
-
-                                                    {isGeneratingAudio ? (
-                                                        <div className="space-y-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600" />
-                                                                <span className="text-sm text-orange-700">Generating audio from edited content...</span>
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Skeleton className="h-2 w-full" />
-                                                                <Skeleton className="h-2 w-3/4" />
-                                                            </div>
-                                                            <p className="text-xs text-orange-600">This may take a few minutes depending on content length</p>
-                                                        </div>
-                                                    ) : generatedAudioUrl ? (
-                                                        <div className="space-y-3">
                                                             <div className="flex items-center gap-3">
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
-                                                                    onClick={playPauseAudio}
+                                                                    onClick={() => playPauseAudio(lang)}
                                                                     className="shrink-0"
                                                                 >
-                                                                    {isPlayingAudio ? (
+                                                                    {isPlayingAudio[lang] ? (
                                                                         <Pause className="h-4 w-4" />
                                                                     ) : (
                                                                         <Play className="h-4 w-4" />
@@ -1089,25 +987,27 @@ const Page = () => {
                                                                 </Button>
                                                                 <div className="flex-1">
                                                                     <audio
-                                                                        ref={setAudioRef}
-                                                                        src={generatedAudioUrl}
-                                                                        onPlay={() => setIsPlayingAudio(true)}
-                                                                        onPause={() => setIsPlayingAudio(false)}
-                                                                        onEnded={() => setIsPlayingAudio(false)}
+                                                                        ref={el => setAudioRefs(prev => ({ ...prev, [lang]: el }))}
+                                                                        src={file.url}
+                                                                        onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
+                                                                        onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                        onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
                                                                         controls
                                                                         className="w-full"
                                                                     />
                                                                 </div>
-                                                            </div>
-                                                            <div className="flex flex-wrap gap-1">
-                                                                {speakerNames.map((name, index) => (
-                                                                    <Badge key={index} variant="secondary" className="text-xs">
-                                                                        {name}: {voiceOptions[index % voiceOptions.length].name}
-                                                                    </Badge>
-                                                                ))}
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    onClick={() => downloadAudio(lang)}
+                                                                    className="hover:bg-orange-100"
+                                                                >
+                                                                    <Download className="h-3 w-3 mr-1" />
+                                                                    Download
+                                                                </Button>
                                                             </div>
                                                         </div>
-                                                    ) : null}
+                                                    ))}
                                                 </div>
                                             )}
 
