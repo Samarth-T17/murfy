@@ -33,12 +33,13 @@ import {
     Play,
     Pause,
     Download,
-    Headphones
+    Headphones,
 } from 'lucide-react'
+import voicesData from '@/lib/voices'
 import { generateContentFromIdea } from '@/gemini/content'
 import type { PodcastContent } from '@/gemini/content'
-import { langVoiceMap } from '@/lib/langVoiceType';
-import voicesData from "@/lib/voices";
+import { langVoiceMap } from '@/lib/langVoiceType'
+import Navigation from '@/components/Navigation';
 
 const themes = [
     {
@@ -424,8 +425,11 @@ const Page = () => {
     };
 
     return (
+        <div className='w-full'>
+              <Navigation />
         <div className="container mx-auto p-6 max-w-7xl">
             {/* Header Section */}
+          
             <div className="mb-8 text-center">
                 <div className="flex items-center justify-center gap-3 mb-4">
                     <div className="p-2 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 text-white">
@@ -1108,6 +1112,7 @@ const Page = () => {
                     </Card>
                 </div>
             </div>
+        </div>
         </div>
     )
 }
