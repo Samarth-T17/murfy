@@ -134,17 +134,16 @@ type VoiceOption = {
     name: string;
     voice_id: string;
 };
-const CHARACTER_MAX = 10;
+
 const Page = () => {
     const [podcastIdea, setPodcastIdea] = useState<string>('');
     const [speakerNamesByLang, setSpeakerNamesByLang] = useState<{ [lang: string]: string[] }>({ english: [] });
     const [selectedLang, setSelectedLang] = useState<string>("english");
     const [selectedVoiceForNewSpeakerByLang, setSelectedVoiceForNewSpeakerByLang] = useState<{ [lang: string]: string }>({});
+    const [audioLangs, setAudioLangs] = useState<string[]>(["english"]);
     const [audioFiles, setAudioFiles] = useState<{ [lang: string]: { url: string, fileName: string } }>({});
     const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-    const [characterNames, setCharacterNames] = useState<string[]>([""]);
-    const [selectedAudioLang, setSelectedAudioLang] = useState<string>("english");
-    const [characterSpeakerMap, setCharacterSpeakerMap] = useState<{ [lang: string]: { [idx: number]: string } }>({});
+
 
     const [generatedContent, setGeneratedContent] = useState<PodcastContent>({
         title: '',
@@ -190,38 +189,7 @@ const Page = () => {
         };
         setWordCounts(counts);
     }, [generatedContent, editedContent]);
-    const handleCharacterNameChange = (idx: number, value: string) => {
-        setCharacterNames(prev => {
-            const arr = [...prev];
-            arr[idx] = value;
-            return arr;
-        });
-    };
-    const addCharacter = () => {
-        if (characterNames.length < CHARACTER_MAX) setCharacterNames(prev => [...prev, ""]);
-    };
-    const removeCharacter = (idx: number) => {
-        setCharacterNames(prev => prev.filter((_, i) => i !== idx));
-        setCharacterSpeakerMap(prev => {
-            const newMap: typeof prev = {};
-            for (const lang in prev) {
-                newMap[lang] = {};
-                for (const i in prev[lang]) {
-                    if (Number(i) < idx) newMap[lang][i] = prev[lang][i];
-                    if (Number(i) > idx) newMap[lang][Number(i) - 1] = prev[lang][i];
-                }
-            }
-            return newMap;
-        });
-    };
 
-    // Speaker selection per character per language
-    const handleSpeakerSelect = (lang: string, idx: number, voiceId: string) => {
-        setCharacterSpeakerMap(prev => ({
-            ...prev,
-            [lang]: { ...(prev[lang] || {}), [idx]: voiceId }
-        }));
-    };
     // Helper for adding speaker per language
     const addSpeakerVoice = (lang: string) => {
         const selectedVoice = selectedVoiceForNewSpeakerByLang[lang];
@@ -270,39 +238,46 @@ const Page = () => {
         const options = langToVoiceOptions[lang] || [];
         return options.filter((voice: VoiceOption) => !(speakerNamesByLang[lang] || []).includes(voice.name));
     };
-    const buildLangVoiceMap = () => {
-        const map: Record<string, string[]> = {};
-        for (const lang of Object.keys(langToVoiceOptions)) {
-            map[lang] = characterNames.map((_, idx) => characterSpeakerMap[lang]?.[idx] || "");
-        }
-        return map;
-    };
 
-    // Generate audio using character names and langVoiceMap
-    const generateAudio = async () => {
-        const langVoiceMap = buildLangVoiceMap();
-        // Only include languages where at least one character has a speaker
-        const filteredLangVoiceMap: typeof langVoiceMap = {};
-        for (const lang in langVoiceMap) {
-            if (langVoiceMap[lang].some(v => v)) filteredLangVoiceMap[lang] = langVoiceMap[lang].filter(v => v);
-        }
-        if (Object.keys(filteredLangVoiceMap).length === 0) {
-            toast.error("Please assign at least one speaker for any language.");
+    // Audio generation functions
+    const generateAudio = async (content: PodcastContent) => {
+        if (!content.content.trim()) {
+            toast.error('No content available to generate audio');
             return;
         }
-        // Send characterNames and langVoiceMap to backend
+
+        // Validate at least one speaker for each selected language
+        for (const lang of audioLangs) {
+            if (!speakerNamesByLang[lang] || speakerNamesByLang[lang].length === 0) {
+                toast.error(`No speakers available for ${lang} audio generation`);
+                return;
+            }
+        }
+
+        // Map speaker names to their corresponding voice IDs for each language
+        const langVoiceMap: langVoiceMap = {};
+        for (const lang of audioLangs) {
+            const names = speakerNamesByLang[lang] || [];
+            const voices = names.map(name => {
+                const voice = voiceOptions.find((v: VoiceOption) => v.name === name);
+                return voice ? voice.voice_id : voiceOptions[0].voice_id;
+            });
+            langVoiceMap[lang] = voices;
+        }
+
         setIsGeneratingAudio(true);
+        toast.info('Generating podcast audio in selected languages...');
+        console.log("langVoiceMap ", langVoiceMap);
         try {
-            console.log("Generated Content: ", generatedContent.content);
             const response = await fetch('/api/generate-audio', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    content: generatedContent.content,
-                    names: characterNames,
-                    langVoiceMap: filteredLangVoiceMap,
-                    description: generatedContent.description,
-                    title: generatedContent.title
+                    content: content.content,
+                    names: speakerNamesByLang["english"], // or main lang
+                    langVoiceMap,
+                    description: content.description,
+                    title: content.title
                 }),
             });
             const data = await response.json();
@@ -318,72 +293,12 @@ const Page = () => {
             }
             setAudioFiles(files);
             toast.success('Audio generated for: ' + Object.keys(files).map(l => supportedLanguages.find(sl => sl.code === l)?.label || l).join(', '));
-        } catch (e) {
-            toast.error("Failed to generate audio");
+        } catch (error) {
+            toast.error('Failed to generate audio');
         } finally {
             setIsGeneratingAudio(false);
         }
-    };                    
-    // Audio generation functions
-    // const generateAudio = async (content: PodcastContent) => {
-    //     if (!content.content.trim()) {
-    //         toast.error('No content available to generate audio');
-    //         return;
-    //     }
-    //     const langsWithSpeakers = Object.keys(speakerNamesByLang).filter(
-    //         lang => (speakerNamesByLang[lang]?.length ?? 0) > 0
-    //     );
-
-    //     if (langsWithSpeakers.length === 0) {
-    //         toast.error('Please add at least one speaker in any language');
-    //         return;
-    //     }
-
-    //     // Map speaker names to their corresponding voice IDs for each language
-    //     const langVoiceMap: langVoiceMap = {};
-    //     for (const lang of langsWithSpeakers) {
-    //         const names = speakerNamesByLang[lang] || [];
-    //         const voices = names.map(name => {
-    //             const voice = (langToVoiceOptions[lang] || []).find((v: VoiceOption) => v.name === name);
-    //             return voice ? voice.voice_id : (langToVoiceOptions[lang]?.[0]?.voice_id ?? "");
-    //         });
-    //         langVoiceMap[lang] = voices;
-    //     }
-
-    //     setIsGeneratingAudio(true);
-    //     toast.info('Generating podcast audio in selected languages...');
-    //     console.log("langVoiceMap ", langVoiceMap);
-    //     try {
-    //         const response = await fetch('/api/generate-audio', {
-    //             method: 'POST',
-    //             headers: { 'Content-Type': 'application/json' },
-    //             body: JSON.stringify({
-    //                 content: content.content,
-    //                 names: speakerNamesByLang["english"], // or main lang
-    //                 langVoiceMap,
-    //                 description: content.description,
-    //                 title: content.title
-    //             }),
-    //         });
-    //         const data = await response.json();
-    //         if (!response.ok) throw new Error(data.error || 'Failed to generate audio');
-
-    //         // Handle multiple audio files
-    //         const files: { [lang: string]: { url: string, fileName: string } } = {};
-    //         for (const lang in data.files) {
-    //             const file = data.files[lang];
-    //             const audioBlob = new Blob([Uint8Array.from(atob(file.audio), c => c.charCodeAt(0))], { type: file.mimeType });
-    //             const audioUrl = URL.createObjectURL(audioBlob);
-    //             files[lang] = { url: audioUrl, fileName: file.fileName };
-    //         }
-    //         setAudioFiles(files);
-    //         toast.success('Audio generated for: ' + Object.keys(files).map(l => supportedLanguages.find(sl => sl.code === l)?.label || l).join(', '));
-    //     } catch (error) {
-    //         toast.error('Failed to generate audio');
-    //     } finally {
-    //         setIsGeneratingAudio(false);
-    //     }
-    // };
+    };
 
     const playPauseAudio = (lang: string) => {
         const audio = audioRefs.current[lang]
@@ -442,14 +357,17 @@ const Page = () => {
             return;
         }
 
-
+        if (!speakerNamesByLang["english"] || speakerNamesByLang["english"].length === 0) {
+            toast.error('Please add at least one speaker for English');
+            return;
+        }
 
         setIsGenerating(true);
         toast.info('Generating podcast content from your idea...');
 
         try {
             // Use the Gemini service to generate content from idea with dynamic speaker names
-            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme, characterNames);
+            const generatedPodcast = await generateContentFromIdea(podcastIdea, selectedTheme, speakerNamesByLang["english"]);
             setGeneratedContent(generatedPodcast);
             setEditedContent(generatedPodcast); // Initialize edited content with generated content
             setHasGenerated(true);
@@ -506,8 +424,11 @@ const Page = () => {
             }
         );
         console.log("Map : ", speakerNamesByLang);
+        // Generate audio automatically after finalizing
+        if (speakerNamesByLang["english"] && speakerNamesByLang["english"].length > 0) {
+            await generateAudio(content);
+        }
 
-        setGeneratedContent({ ...content });
         // Optional: Reset state or redirect user
         console.log('Finalized content:', {
             type,
@@ -522,12 +443,13 @@ const Page = () => {
         });
     };
 
-
     return (
-    <div className='w-full'>
-        <Navigation />
+        <div className='w-full'>
+            
+              <Navigation />
         <div className="container mx-auto p-6 max-w-7xl">
             {/* Header Section */}
+          
             <div className="mb-8 text-center">
                 <div className="flex items-center justify-center gap-3 mb-4">
                     <div className="p-2 rounded-full bg-gradient-to-br from-purple-500 to-blue-600 text-white">
@@ -538,13 +460,13 @@ const Page = () => {
                     </h1>
                 </div>
                 <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
-                    Simply share your podcast idea and let AI create professional, engaging content tailored to your chosen theme.
-                    Generate complete episodes with titles, descriptions, and full scripts in seconds.
+                    {"Simply share your podcast idea and let AI create professional, engaging content tailored to your chosen theme. "}
+                    {"Generate complete episodes with titles, descriptions, and full scripts in seconds."}
                 </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: Idea Input, Theme, Characters */}
+                {/* Idea Input & Theme Selection */}
                 <div className="lg:col-span-1">
                     <Card>
                         <CardHeader>
@@ -553,7 +475,7 @@ const Page = () => {
                                 AI Content Generation
                             </CardTitle>
                             <CardDescription>
-                                Enter your podcast idea, characters, and select a theme to generate complete content
+                                Enter your podcast idea, choose speakers, and select a theme to generate complete content
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -592,30 +514,104 @@ const Page = () => {
                                     </SelectContent>
                                 </Select>
                             </div>
-                            {/* Character Settings */}
-                            <div className="mb-4">
-                                <Label>Characters</Label>
-                                {characterNames.map((name, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 mb-2">
-                                        <Input
-                                            value={name}
-                                            onChange={e => handleCharacterNameChange(idx, e.target.value)}
-                                            placeholder={`Character ${idx + 1}`}
-                                            className="flex-1"
-                                        />
-                                        {characterNames.length > 1 && (
-                                            <Button size="sm" variant="ghost" onClick={() => removeCharacter(idx)}>
-                                                <X className="h-4 w-4" />
+
+                            {/* Speaker Names Section (per language) */}
+                            <div>
+                                <Label className="mb-3">Podcast Speakers (per language)</Label>
+                                <Tabs value={selectedLang} onValueChange={setSelectedLang} className="mb-2">
+                                    <TabsList>
+                                        {supportedLanguages.map(lang => (
+                                            <TabsTrigger key={lang.code} value={lang.code}>
+                                                {lang.label}
+                                            </TabsTrigger>
+                                        ))}
+                                    </TabsList>
+                                </Tabs>
+                                <div>
+                                    {/* Current Speakers for selectedLang */}
+                                    {(speakerNamesByLang[selectedLang] || []).map((name, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg border mb-1">
+                                            <span>{name}</span>
+                                            {(speakerNamesByLang[selectedLang]?.length ?? 0) > 1 && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => removeSpeakerName(selectedLang, name)}
+                                                    className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
+                                                >
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {/* Add New Speaker */}
+                                    {(speakerNamesByLang[selectedLang]?.length ?? 0) < SPEAKER_MAX_LIMIT && (
+                                        <div className="flex gap-2 mt-2">
+                                            <Select
+                                                value={selectedVoiceForNewSpeakerByLang[selectedLang] || ''}
+                                                onValueChange={val => setSelectedVoiceForNewSpeakerByLang(prev => ({ ...prev, [selectedLang]: val }))}
+                                            >
+                                                <SelectTrigger className="flex-1">
+                                                    <SelectValue placeholder="Select a voice..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {getAvailableVoices(selectedLang)
+                                                        .map((voice: VoiceOption) => (
+                                                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
+                                                                {voice.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button
+                                                onClick={() => addSpeakerVoice(selectedLang)}
+                                                disabled={!selectedVoiceForNewSpeakerByLang[selectedLang]}
+                                                size="sm"
+                                            >
+                                                <Plus className="h-4 w-4" />
                                             </Button>
-                                        )}
+                                        </div>
+                                    )}
+                                    {/* Reset speakers for this language */}
+                                    <div className="flex gap-2 mt-3">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => resetSpeakerNames(selectedLang)}
+                                            className="text-xs"
+                                        >
+                                            <UserPlus className="h-3 w-3 mr-1" />
+                                            Reset Speakers
+                                        </Button>
                                     </div>
-                                ))}
-                                {characterNames.length < CHARACTER_MAX && (
-                                    <Button size="sm" onClick={addCharacter} className="mt-2">
-                                        <Plus className="h-4 w-4 mr-1" /> Add Character
-                                    </Button>
-                                )}
+                                    <div className="text-xs text-muted-foreground mt-2 p-2 bg-blue-50 rounded border-l-2 border-blue-200">
+                                        <Info className="h-3 w-3 inline mr-1" />
+                                        Select from {(langToVoiceOptions[selectedLang]?.length ?? 0)} available AI voices. Speakers will be used in the generated podcast dialogue. Maximum {SPEAKER_MAX_LIMIT} speakers allowed per language.
+                                    </div>
+                                </div>
                             </div>
+
+                            {/* Audio Language Selection */}
+                            <div className="mb-4">
+                                <Label>Select languages for audio:</Label>
+                                <div className="flex flex-wrap gap-2 mt-2">
+                                    {supportedLanguages.map(lang => (
+                                        <Button
+                                            key={lang.code}
+                                            variant={audioLangs.includes(lang.code) ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => setAudioLangs(langs =>
+                                                langs.includes(lang.code)
+                                                    ? langs.filter(l => l !== lang.code)
+                                                    : [...langs, lang.code]
+                                            )}
+                                        >
+                                            {lang.label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {selectedTheme && (
                                 <div className="p-4 bg-gradient-to-r from-muted/50 to-muted rounded-lg border-l-4 border-primary">
                                     <div className="flex items-center gap-2 mb-2">
@@ -637,7 +633,7 @@ const Page = () => {
                                     <TooltipTrigger asChild>
                                         <Button
                                             onClick={generatePodcastContent}
-                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim() || characterNames.filter(Boolean).length === 0}
+                                            disabled={isGenerating || !selectedTheme || !podcastIdea.trim() || !speakerNamesByLang["english"] || speakerNamesByLang["english"].length === 0}
                                             className="w-full relative overflow-hidden group"
                                         >
                                             {isGenerating ? (
@@ -654,11 +650,12 @@ const Page = () => {
                                         </Button>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                        <p>Enter your podcast idea, select a theme, and add characters to generate complete content</p>
+                                        <p>Enter your podcast idea, select a theme, and add speakers to generate complete content</p>
                                     </TooltipContent>
                                 </Tooltip>
                             </TooltipProvider>
 
+                            {/* Progress indicator when generating */}
                             {isGenerating && (
                                 <div className="space-y-2">
                                     <div className="text-sm text-muted-foreground text-center">
@@ -672,6 +669,7 @@ const Page = () => {
                                 </div>
                             )}
 
+                            {/* API Key Notice */}
                             {!process.env.NEXT_PUBLIC_GEMINI_API_KEY && (
                                 <Alert>
                                     <AlertCircle className="h-4 w-4" />
@@ -684,18 +682,24 @@ const Page = () => {
                     </Card>
                 </div>
 
-                {/* Right: Tabs for Content and Audio Settings */}
+                {/* Content Display */}
                 <div className="lg:col-span-2">
-                    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                        <TabsList className="grid w-full grid-cols-3">
-                            <TabsTrigger value="generated">AI Generated</TabsTrigger>
-                            <TabsTrigger value="edited" disabled={!hasGenerated}>
-                                Edited Version {hasGenerated && <Badge className="ml-2" variant="secondary">Ready</Badge>}
-                            </TabsTrigger>
-                            <TabsTrigger value="audio">Audio Settings</TabsTrigger>
-                        </TabsList>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Generated Podcast Content</CardTitle>
+                            <CardDescription>
+                                AI-generated podcast content based on your idea and theme
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                                <TabsList className="grid w-full grid-cols-2">
+                                    <TabsTrigger value="generated">AI Generated</TabsTrigger>
+                                    <TabsTrigger value="edited" disabled={!hasGenerated}>
+                                        Edited Version {hasGenerated && <Badge className="ml-2" variant="secondary">Ready</Badge>}
+                                    </TabsTrigger>
+                                </TabsList>
 
-                        {/* AI Generated Tab */}
                                 <TabsContent value="generated" className="space-y-4">
                                     {hasGenerated ? (
                                         <div className="space-y-4">
@@ -847,7 +851,7 @@ const Page = () => {
                                                             <TooltipTrigger asChild>
                                                                 <Button
                                                                     variant="outline"
-                                                                    onClick={() => generateAudio()}
+                                                                    onClick={() => generateAudio(generatedContent)}
                                                                     disabled={isGeneratingAudio}
                                                                     className="group hover:bg-blue-50"
                                                                 >
@@ -913,7 +917,6 @@ const Page = () => {
                                     )}
                                 </TabsContent>
 
-                        {/* Edited Version Tab */}
                                 <TabsContent value="edited" className="space-y-4">
                                     {hasGenerated ? (
                                         <div className="space-y-4">
@@ -1066,7 +1069,7 @@ const Page = () => {
                                                             <TooltipTrigger asChild>
                                                                 <Button
                                                                     variant="outline"
-                                                                    onClick={() => generateAudio()}
+                                                                    onClick={() => generateAudio(editedContent)}
                                                                     disabled={isGeneratingAudio}
                                                                     className="group hover:bg-orange-50"
                                                                 >
@@ -1117,69 +1120,14 @@ const Page = () => {
                                         </div>
                                     )}
                                 </TabsContent>
-
-                        {/* Audio Settings Tab */}
-                        <TabsContent value="audio" className="space-y-6">
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>Audio Settings</CardTitle>
-                                    <CardDescription>
-                                        Map your characters to AI voices for each language.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="mb-4">
-                                        <Label>Language</Label>
-                                        <Select value={selectedAudioLang} onValueChange={setSelectedAudioLang}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select language" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {supportedLanguages.map(lang => (
-                                                    <SelectItem key={lang.code} value={lang.code}>{lang.label}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
-                                        <Label>Assign Speakers</Label>
-                                        {characterNames.map((char, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 mb-2">
-                                                <span className="w-32 truncate">{char || `Character ${idx + 1}`}</span>
-                                                <Select
-                                                    value={characterSpeakerMap[selectedAudioLang]?.[idx] || ""}
-                                                    onValueChange={val => handleSpeakerSelect(selectedAudioLang, idx, val)}
-                                                >
-                                                    <SelectTrigger className="flex-1">
-                                                        <SelectValue placeholder="Select a voice..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {(langToVoiceOptions[selectedAudioLang] || []).map(voice => (
-                                                            <SelectItem key={voice.voice_id} value={voice.voice_id}>
-                                                                {voice.name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    <Button
-                                        className="mt-6"
-                                        onClick={generateAudio}
-                                        disabled={isGeneratingAudio}
-                                    >
-                                        {isGeneratingAudio ? "Generating..." : "Generate Audio"}
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        </TabsContent>
-                    </Tabs>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>
-    </div>
-)
+        </div>
+    )
 }
 
 export default Page

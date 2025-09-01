@@ -23,6 +23,8 @@ export async function generatePodcastAudio(
 ): Promise<Record<string, string>> {
 
     const paths: Record<string, string> = {};
+    console.log("Generating audio for languages:", allSpeakers);
+    
     for(const key in allSpeakers) {
         const speakers = allSpeakers[key];
         const voiceMap = new Map<string, string>();
@@ -32,10 +34,12 @@ export async function generatePodcastAudio(
 
         const parsedContent = parsePodcastContent(content, voiceMap);
         if(key != "english" && allSpeakers[key].length != 0) {
+            console.log("Translating content for language:", key);
             const translatedContent = await translatePodcastContent(parsedContent, key);
             const audioFilePath = await generateAudio(translatedContent, uniqueId + key);
             paths[key] = audioFilePath;
         } else if(allSpeakers[key].length != 0) {
+            console.log("Generating audio for language:", key);
             const audioFilePath = await generateAudio(parsedContent, uniqueId + key);
             paths[key] = audioFilePath;
         }   
