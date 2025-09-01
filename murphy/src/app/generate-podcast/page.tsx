@@ -616,21 +616,7 @@ const Page = () => {
                                     </Button>
                                 )}
                             </div>
-                            {selectedTheme && (
-                                <div className="p-4 bg-gradient-to-r from-muted/50 to-muted rounded-lg border-l-4 border-primary">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        {React.createElement(themes.find(t => t.value === selectedTheme)?.icon || Info, {
-                                            className: "h-4 w-4"
-                                        })}
-                                        <Badge variant="outline" className={themes.find(t => t.value === selectedTheme)?.color}>
-                                            {themes.find(t => t.value === selectedTheme)?.label}
-                                        </Badge>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground">
-                                        {themes.find(t => t.value === selectedTheme)?.description}
-                                    </p>
-                                </div>
-                            )}
+                            
 
                             <TooltipProvider>
                                 <Tooltip>
@@ -1171,6 +1157,56 @@ const Page = () => {
                                     >
                                         {isGeneratingAudio ? "Generating..." : "Generate Audio"}
                                     </Button>
+
+                                    {/* AUDIO PLAYER SECTION */}
+                                    {Object.keys(audioFiles).length > 0 && (
+                                        <div className="space-y-4 mt-8">
+                                            <Label>Generated Audio Files</Label>
+                                            {Object.entries(audioFiles).map(([lang, file]) => (
+                                                <div key={lang} className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Headphones className="h-4 w-4" />
+                                                        <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
+                                                        <Badge variant="outline">{file.fileName}</Badge>
+                                                    </div>
+                                                    <div className="flex items-center gap-3">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => playPauseAudio(lang)}
+                                                            className="shrink-0"
+                                                        >
+                                                            {isPlayingAudio[lang] ? (
+                                                                <Pause className="h-4 w-4" />
+                                                            ) : (
+                                                                <Play className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                        <div className="flex-1">
+                                                            <audio
+                                                                ref={el => { audioRefs.current[lang] = el }}
+                                                                src={file.url}
+                                                                onPlay={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: true }))}
+                                                                onPause={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                onEnded={() => setIsPlayingAudio(prev => ({ ...prev, [lang]: false }))}
+                                                                controls
+                                                                className="w-full"
+                                                            />
+                                                        </div>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => downloadAudio(lang)}
+                                                            className="hover:bg-purple-100"
+                                                        >
+                                                            <Download className="h-3 w-3 mr-1" />
+                                                            Download
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </TabsContent>
