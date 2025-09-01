@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PodcastHub",
-  description: "Create your audio powered blogs with ease",
+  title: "Murphy",
+  description: "Create your audio powered podcasts with ease",
 };
 
 export default function RootLayout({
