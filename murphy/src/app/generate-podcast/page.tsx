@@ -1167,7 +1167,7 @@ const Page = () => {
                                                     <div className="flex items-center gap-2 mb-2">
                                                         <Headphones className="h-4 w-4" />
                                                         <span className="font-medium">{supportedLanguages.find(l => l.code === lang)?.label || lang}</span>
-                                                        <Badge variant="outline">{file.fileName}</Badge>
+                                                    
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <Button
